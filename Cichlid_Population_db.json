@@ -1,0 +1,9 @@
+{
+  "vpHost": "127.0.0.1",
+  "vpPort": "3306",
+  "vpInstance": "CICHLID_TRACKINGV3",
+  "vpUser": "root",
+  "vpPassword": "xxxxxxx",
+  "scriptDirectory": "xxxxxxxx",
+  "resultFileDir": "/xxxxxxxx"
+}
