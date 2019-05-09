@@ -1,0 +1,147 @@
+Steps to generate cichlid level g.vcfs
+
+- map the sequences to the reference [see below call 1]
+    <project>/<sample>/xxx.fastq/cram/bam -> <project>/<sample>/<reference>/<sample>.mem.cram
+- compress using crumble [see below call 2]
+    <project>/<sample>/<reference>/<sample>.mem.cram -> <project>/<sample>/<reference>/<sample>.mem.crumble.cram
+- index the crumble file [see below call 3]
+    <project>/<sample>/<reference>/<sample>.mem.crumble.cram -> <project>/<sample>/<reference>/<sample>.mem.crumble.cram.crai
+- generating a stat file [see below call 4]
+    <project>/<sample>/<reference>/<sample>.mem.crumble.cram -> <project>/<sample>/<reference>/<sample>.mem.crumble.cram_stats
+- ran GATK Haplotype Caller [see below call 5]
+    <project>/<sample>/<reference>/<sample>.mem.crumble.cram -> <project>/<sample>/<reference>/vcf/<chr>.vcf.gz
+- if necessary index the vcf using tabix [see below call 6]
+    <project>/<sample>/<reference>/vcf/<chr>.vcf.gz -> <project>/<sample>/<reference>/vcf/<chr>.vcf.gz.tbi
+- concatenate the chromosomal vcf as a sample vcf [see below call 7]
+    <project>/<sample>/<reference>/vcf/<chr>.vcf.gz -> <project>/<sample>/<reference>/<sample.vcf.gz>
+- run CombineGVCFs [see below call 8]
+    run on subset of samples (indicated in a sample.list file, then re-run to combine these to reach a project level g.vcf.gz)
+    <project>/<sample>/<reference>/<sample.vcf.gz> -> <project>/<reference>/<chr>/list.g.vcf.gz
+    and finally: <project>/<reference>/<chr>/<chr>.g.vcf.gz
+- EXAMPLE OF CHECKS
+    - samtools view -H <cram> see the header, to check if correct sample is named in the cram file
+    - bcftools query -l <vcf.gz> list the samples used in the vcf file; use ' |wc -l' to check that this number is as expected
+- run GATK GenotypeGVCFs to call the variants [see below call 9]
+    run on chunks to reduce time and memory demand: 1 Mbase long chunks with 1 kb overlap at each end
+    <project>/<chr>/<chr>.g.vcf.gz -> <chr_chunks>.g.vcf.gz
+    Note: as the overlap of 1kb is added at start and end of chunks, there will be 2 kb overlap except for first and last fragments
+    Note2: due to the overlap, the concatenation will have to be carried out carefully.
+    Note2: the length for each chromosome in the reference has to be provided to the script for each chromosome
+
+call 1
+    <path to vr-wrapper> ~/.vrw/runners <path to run-align> -f /<path to files.fofn> -o <path to output directory> -r <path to reference fasta file> +js SLURM +config <path to config file>
+  example:
+     ~/rds/rds-rd109-durbin-group/projects/cichlid/Hubert/vr-runner/scripts/vr-wrapper ~/.vrw/runners ~/rds/rds-rd109-durbin-group/projects/cichlid/Hubert/run-align
+     -f ~/rds/rds-rd109-durbin-group/projects/cichlid/Hubert/Files.fofn -o ~/rds/rds-rd109-durbin-group/projects/cichlid/Hubert/OUTPUT
+     -r ~/rds/rds-rd109-durbin-group/ref/fish/Astatotilapia_calliptera/fAstCal1.2/GCA_900246225.3_fAstCal1.2_genomic_chromnames_mt.fa +js SLURM
+     +config ~/rds/rds-rd109-durbin-group/projects/cichlid/Hubert/align.conf
+  where Files.fofn:
+    /home/had38/rds/rds-rd109-durbin-group/projects/cichlid/data/I2688_MWGS_The_genetic_basis_of_fisheries_induced_selection_on_cichlids_in_Lake_Malombe/cichlid6779889/22553_4#1.cram      cichlid6779889 …
+  and where align.conf:
+    # For sanity checking that your config file is not obsolete. Update
+    version  => '1427807557',
+    samtools => '~/rds/rds-rd109-durbin-group/software/htslib-1.9/bin/samtools',
+    minimap2 => '/software/vertres/bin-external/minimap2',
+    ref_fa => '~/rds/rds-rd109-durbin-group/ref/fish/Astatotilapia_calliptera/fAstCal1.2/GCA_900246225.3_fAstCal1.2_genomic_chromnames_mt.fa',
+    threads => '24'
+
+call 2
+    sbatch --parsable --time=00:30:00 --mem=50000 --cpus-per-task=1 --array='1' -e crumble_e -o crumble_o --wrap='~/rds/project/rd109/rds-rd109-durbin-group/software/crumble-0.8.1/bin/crumble
+    -O cram <path to mem.cram> <output name>
+  example (from a 'project' directory)
+   for i in `ls ` ; do sbatch --parsable --time=600 --mem=50000 --cpus-per-task=1 --array='1' -e crumble_e -o crumble_o --wrap='~/rds/project/rd109/rds-rd109-durbin-group/software/crumble-0.8.1/bin/crumble -O cram $i/fAstCal1.2/'$i'.mem.cram '$i'.mem.crumble.cram'; done
+
+call 3
+    sbatch --parsable --time=600 --mem=10000 --cpus-per-task=1 --array='1' -e indexe -o indexo --wrap='~/rds/rds-rd109-durbin-group/projects/cichlid/Hubert/samtools-1.9/samtools
+    index <path to crumble file>
+  example (from a 'project' directory)
+    for i in `ls `; do sbatch --parsable --time=600 --mem=10000 --cpus-per-task=1 --array='1' -e indexe -o indexo --wrap='/home/had38/rds/rds-rd109-durbin-group/projects/cichlid/Hubert/samtools-1.9/samtools
+    index '$i'/fAstCal1.2/'$i'.mem.crumble.cram’; done
+
+call 4
+    <path to run3-gatk3-calling> +config <path to config file> gatk2.conf -f <path to reference fasta file> -o <path to output directory> -b <path to files.fofn> +js SLURM +maxjobs 230;
+  example
+    ~/rds/rds-rd109-durbin-group/projects/cichlid/Hubert/run3-gatk3-calling +config ~/rds/rds-rd109-durbin-group/projects/cichlid/Hubert/gatk2.conf
+    -f ~/rds/rds-rd109-durbin-group/ref/fish/Astatotilapia_calliptera/fAstCal1.2/GCA_900246225.3_fAstCal1.2_genomic_chromnames_mt.fa -o .
+    -b ~/rds/rds-rd109-durbin-group/projects/cichlid/Hubert/TEST_OUTPUT1/Files.fofn +js SLURM +maxjobs 230;
+  where Files.fofn:
+    bam     sample  study
+    HG_Malawi_Tanganyika_convergent_cichlid_sequencing/5308STDY7441273/fAstCal1.2/5308STDY7441273.mem.crumble.cram  5308STDY7441273 HG_Malawi_Tanganyika_convergent_cichlid_sequencing …
+
+call 5
+    bcftools stats <sample.vcf.gz> > <sample.vcf.gz.stats>
+  example
+    bcftools stats ../fAstCal1.2/CMASS6608037.cram.vcf.gz > ../fAstCal1.2/CMASS6608037.cram.vcf.gz.stats
+
+call 6
+    batch --parsable --time=600 --mem=30000 --cpus-per-task=1 --array='1' -e indexe -o indexo --wrap='gzip -d <sample.vcf.gz>; bgzip -c <sample.vcf> > <sample.vcf.gz> ;  tabix -p vcf <sample.vcf.gz>
+  example
+    batch --parsable --time=600 --mem=30000 --cpus-per-task=1 --array='1' -e indexe -o indexo --wrap='gzip -d cichlid6978768.cram-vcf.gz; bgzip -c cichlid6978768.cram-vcf > cichlid6978768.cram-vcf.gz ;  tabix -p vcf cichlid6978768.cram-vcf.gz'
+
+call 7
+    sbatch --parsable --time=600 --mem=10000 --cpus-per-task=1 --array='1' -e concate -o concate0 --wrap='bcftools concat -n -o <path to sample.vcf.gz> <path to chromosomal.vcf.gz>
+  example (from a 'project' directory)
+    for i in `less list_samples_to_concatenate`; do c=`ls $i/fAstCal1.2/vcf | grep -c vcf.gz$`; if [[ $c = 23 ]]; then sbatch --parsable --time=600 --mem=10000 --cpus-per-task=24 --array='1' -e concate -o concate0 --wrap='bcftools concat -n -o '$i'/fAstCal1.2/'$i'.vcf.gz '$i'/fAstCal1.2/vcf/chr*.vcf.gz'; else echo $c >> not_completed; fi; done
+
+call 8
+  bash script to run CombineGVCFs:
+    #!/bin/bash
+    for i in {1..20} 22 23 M ; do
+      for j in `ls call_list| grep 'fileschr'$i'_'` ; do
+        java -jar ~/rds/rds-rd109-durbin-group/software/GenomeAnalysisTK-3.8-1-0-gf15c1c3ef/GenomeAnalysisTK.jar \
+        -T CombineGVCFs \
+        -R ~/rds/rds-rd109-durbin-group/ref/fish/Astatotilapia_calliptera/fAstCal1.2/GCA_900246225.3_fAstCal1.2_genomic_chromnames.fa \
+        -L ‘chr’$i \
+        --variant /home/had38/rds/rds-rd109-durbin-group/projects/cichlid/Hubert/CombineGVCF/call_list/$j \
+        -o ~/rds/rds-rd109-durbin-group/projects/cichlid/Hubert/CombineGVCF/combined_gvcf/$j.g.vcf
+      done
+    done
+  where call list is a folder containing files with list of path to chromosome for 80 samples at the time (to avoid sending too many at the time to CombineGVCFs).
+  Each list file has to end with '.list'. Example of file:
+    ~/rds/rds-rd109-durbin-group/projects/cichlid/alignments/IHTP_WGS_Cichlid_Massako_diversity/CMASS6389749/fAstCal1.2/vcf/chr1.vcf.gz
+    ~/rds/rds-rd109-durbin-group/projects/cichlid/alignments/IHTP_WGS_Cichlid_Massako_diversity/CMASS6389750/fAstCal1.2/vcf/chr1.vcf.gz ...
+
+call 9
+  bash script to run GenotypeGVCFs (modified from Tyler Linderoth's script)
+    #!/bin/bash
+    # batchGenotypeGVCFs.sh
+    # ./batchGenotypeGVCFs.sh --variant [directory with input VCF files] -L [chr or chr region] -o [directory for Genotype output file]
+   #chr='12' #(3 4 5 6 7  9 10 11 12 13 14 15 16 17 18 19 20 22 23)
+   REF='/lustre/scratch116/vr/ref/cichlid/fAstCal1.2/GCA_900246225.3_fAstCal1.2_genomic_chromnames_mt.fa'
+   GATK='/lustre/scratch116/vr/projects/cichlid/alignments/Hubert/GenomeAnalysisTK-3.8-1-0-gf15c1c3ef/GenomeAnalysisTK.jar'
+   PI=0.001   # %heterozygocity: set to GATK default after discussion with Richard Durbin
+   PISTD=0.01 # Standard Deviationd heterozygosity: set to GATK default after discussion with Richard Durbin
+   nargs=$#
+   ((--nargs))
+   Max=$2
+   chr=$1
+   #in order to add the length of the chromosome, I will start them one per one so the next line can be altered/remove
+   for i in "${chr[@]}"; do
+     #define start and end of chunks with overlap of 1kb
+     for k in $(seq 1 1000000 $MAX); do
+       e=$(($k+1000000-1+1000))
+       if [[ k -lt 2 ]]; then
+          s=$k
+       else
+          s=$(($k-1000-1))
+       fi
+       #the end of the last chunk has to match the chromosome length
+       if [[ e -gt 38669361 ]]; then
+            e=38669361
+       fi
+       VCFOUT='/lustre/scratch116/vr/projects/cichlid/alignments/Hubert/COMPL/chr'$i'_'$k'd.g.vcf'
+       bsub -q basement -e 'chr'$i'_'$k'd_Ge' -o 'chr'$i'_'$k'd_Go' -M 80000 -R'select[mem>80000] rusage[mem=80000]' \
+       '/lustre/scratch116/vr/projects/cichlid/alignments/Hubert/jdk1.8.0_201/jre/bin/java -jar '$GATK' -T GenotypeGVCFs -R '$REF' -allSites \
+       -hets '$PI' -heterozygosityStandardDeviation '$PISTD'\
+       --variant /lustre/scratch116/vr/projects/cichlid/alignments/Hubert/ILB_Cichlid_diversity_sequencing_WTMGM_student_project/chr'$i'/chr'$i'.g.vcf.gz \
+       --variant /lustre/scratch116/vr/projects/cichlid/alignments/Hubert/I2688_MWGS_The_genetic_basis_of_fisheries/chr'$i'/chr'$i'.g.vcf.gz \
+       --variant /lustre/scratch116/vr/projects/cichlid/alignments/Hubert/IHTP_MWGS_Cichlid_Malawi_2016_batch_1/chr'$i'/chr'$i'.g.vcf.gz \
+       --variant /lustre/scratch116/vr/projects/cichlid/alignments/Hubert/IHTP_WGS_Cichlid_Massako_diversity/chr'$i'/chr'$i'.g.vcf.gz \
+       --variant /lustre/scratch116/vr/projects/cichlid/alignments/Hubert/HG_2018_cichlid_Massoko_DNA/chr'$i'/chr'$i'.g.vcf.gz \
+       --variant /lustre/scratch116/vr/projects/cichlid/alignments/Hubert/HG_Malawi_Tanganyika_convergent_cichlid_sequencing/chr'$i'/chr'$i'.g.vcf.gz \
+       --variant /lustre/scratch116/vr/projects/cichlid/alignments/Hubert/HG_Malawi_Copadichromis_Anseeuw_Fin_Clip_Pilot/chr'$i'/chr'$i'.g.vcf.gz \
+       --variant /lustre/scratch116/vr/projects/cichlid/alignments/Hubert/Malawi_cichlids_2017/chr'$i'/chr'$i'.g.vcf.gz \
+       -L chr'$i':'$s'-'$e' \
+       -o '$VCFOUT
+      done
+    done
