@@ -126,6 +126,7 @@ def overwrite_field(table, dic, different_items, verbose, studyDAO):
     : return table_identifier (int) value of table identifier after update took place or '0' if no update took place
     : return 'U' (str) flag to indicate that update took place
     '''
+    print("    overwrite field")
     table_identifier = 0
     update_dic = dict(different_items)
     #for individual data, use both identifier: individual_id and cv_id
@@ -161,6 +162,7 @@ def update_field(table, dic, different_items, verbose, studyDAO):
     : return table_identifier (int) value of table identifier after update took place or '0' if no update took place
     : return 'U' (str) flag to indicate that update took place
     '''
+    print("    update field")
     update_dic = {}
     insert_dic ={}
     table_identifier = 0
@@ -180,6 +182,7 @@ def update_field(table, dic, different_items, verbose, studyDAO):
     #other tables have only one identifier
     else :
         table_identifier = dic[table+"_id"]
+        print (table_identifier)
         if table not in ['project', 'developmental_stage', 'organism_part', 'location', 'cv', 'seq_centre', 'library_type']:
             update_dic['changed'] = today
             update_dic['latest'] = 0
@@ -191,6 +194,7 @@ def update_field(table, dic, different_items, verbose, studyDAO):
                 raise
         insert_dic = {k:v for k,v in dic.items() if k not in ['row_id', table+'_id', 'changed']}
         insert_dic.update(different_items)
+        print (insert_dic)
         #get higest index
         max_ID = studyDAO.getmaxIndex(table)
         table_identifier = max_ID[0]['max('+table+'_id)']+1
@@ -218,6 +222,7 @@ def insert_field(table, table_dic , table_identifier_dic, dependent_list, verbos
     : return table_identifier (int) value of table identifier after insertion took place or '0' if no insertion took place
     : return 'I' (str) flag to indicate that insertion took place
     '''
+    print("    insert field")
     table_identifier = 0
     #get the dependent table if exists
     if len(dependent_list) > 0:
@@ -383,7 +388,6 @@ def parse_spreadsheet(spread_path, studyDAO):
     countIndividual = 0
     individual_name =""
     spreadsheet = 'user spreadsheet'
-    #the first line is the header, the second is the example
     start_read = 2
     #define header for each table according to spreadsheet url (create new one if different spreadsheet provided)
     if '1978536442' in spread_path:
@@ -464,7 +468,6 @@ def parse_spreadsheet(spread_path, studyDAO):
                 spread_dic[individual_name] =[line_dic]
     return spread_dic, spreadsheet
 
-#not in use currenly but could be used to update/add data from json file
 def parse_json(json_path, studyDAO):
     '''
     function to open the json and reformat the data
@@ -573,6 +576,7 @@ def populate_database(raw_results, entry_name, studyDAO, verbose, mydbconn):
                 Id_update_flag = ""
                 ann_flag = ""
                 if 'record' in raw_results[individual_name][index]:
+                    print ('yes')
                     if raw_results[individual_name][index]['record']['option']=='update':
                         flag = False
                     else:
@@ -666,7 +670,7 @@ def populate_database(raw_results, entry_name, studyDAO, verbose, mydbconn):
     else:
         if all_flag.count("I") > 0 or all_flag.count("U") > 0:
             logging.info("Committing data from the "+raw_results_type+" "+entry_name+" to the database")
-            mydbconn.commit()
+            #mydbconn.commit()
 
 def main(programSetup):
     configSettings = programSetup.config
