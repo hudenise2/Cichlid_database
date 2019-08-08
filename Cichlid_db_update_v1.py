@@ -13,7 +13,7 @@ from urllib.request import urlopen
 from dao.mysql.mysql_db_access_object import MySQLDataAccessObject
 from dao.mysql import StudyDAO
 import Get_taxonomy_from_NCBI as TaxUtils
-
+import copy
 
 __author__ = 'Hubert Denise, Mar. 2019'
 
@@ -126,7 +126,6 @@ def overwrite_field(table, dic, different_items, verbose, studyDAO):
     : return table_identifier (int) value of table identifier after update took place or '0' if no update took place
     : return 'U' (str) flag to indicate that update took place
     '''
-    print("    overwrite field")
     table_identifier = 0
     update_dic = dict(different_items)
     #for individual data, use both identifier: individual_id and cv_id
@@ -141,7 +140,7 @@ def overwrite_field(table, dic, different_items, verbose, studyDAO):
     #other tables have only one identifier
     else:
         table_identifier = dic[table+"_id"]
-        if table not in ['project', 'developmental_stage', 'organism_part', 'location', 'cv', 'seq_centre', 'library_type']:
+        if table not in ['project', 'developmental_stage', 'organism_part', 'location', 'cv', 'seq_centre', 'library_type', 'seq_tech']:
             update_dic['changed'] = today
         field_statement = prepare_update(update_dic)
         try:
@@ -162,7 +161,6 @@ def update_field(table, dic, different_items, verbose, studyDAO):
     : return table_identifier (int) value of table identifier after update took place or '0' if no update took place
     : return 'U' (str) flag to indicate that update took place
     '''
-    print("    update field")
     update_dic = {}
     insert_dic ={}
     table_identifier = 0
@@ -182,8 +180,7 @@ def update_field(table, dic, different_items, verbose, studyDAO):
     #other tables have only one identifier
     else :
         table_identifier = dic[table+"_id"]
-        print (table_identifier)
-        if table not in ['project', 'developmental_stage', 'organism_part', 'location', 'cv', 'seq_centre', 'library_type']:
+        if table not in ['project', 'developmental_stage', 'organism_part', 'location', 'cv', 'seq_centre', 'library_type', 'seq_tech']:
             update_dic['changed'] = today
             update_dic['latest'] = 0
             field_statement = prepare_update(update_dic)
@@ -194,12 +191,11 @@ def update_field(table, dic, different_items, verbose, studyDAO):
                 raise
         insert_dic = {k:v for k,v in dic.items() if k not in ['row_id', table+'_id', 'changed']}
         insert_dic.update(different_items)
-        print (insert_dic)
         #get higest index
         max_ID = studyDAO.getmaxIndex(table)
         table_identifier = max_ID[0]['max('+table+'_id)']+1
         #for table with latest and changed field
-        if table not in ['project', 'developmental_stage', 'organism_part', 'location', 'cv', 'seq_centre', 'library_type']:
+        if table not in ['project', 'developmental_stage', 'organism_part', 'location', 'cv', 'seq_centre', 'library_type', 'seq_tech']:
             field_str, value_str = dic_to_str(insert_dic,", changed, "+table+"_id",", '"+today+"', " + str(table_identifier))
         else:
             field_str, value_str = dic_to_str(insert_dic,", "+table+"_id",", " + str(table_identifier))
@@ -222,7 +218,14 @@ def insert_field(table, table_dic , table_identifier_dic, dependent_list, verbos
     : return table_identifier (int) value of table identifier after insertion took place or '0' if no insertion took place
     : return 'I' (str) flag to indicate that insertion took place
     '''
-    print("    insert field")
+
+    print("=============================================================")
+    print(table)
+    print(table_dic)
+    print(table_identifier_dic)
+    print(dependent_list)
+    print("=============================================================")
+
     table_identifier = 0
     #get the dependent table if exists
     if len(dependent_list) > 0:
@@ -230,12 +233,32 @@ def insert_field(table, table_dic , table_identifier_dic, dependent_list, verbos
             if dep_table == 'ontology':
                 dep_table_index = studyDAO.getIndex(dep_table, table_identifier_dic[dep_table], table_dic[table][table_identifier_dic[dep_table]]+"s")
             else:
-                if dep_table not in ['project', 'developmental_stage', 'organism_part', 'location', 'seq_centre', 'library_type', 'cv']:
-                    dep_table_index = studyDAO.getIndex(dep_table, 'latest = 1  and '+table_identifier_dic[dep_table], table_dic[dep_table][table_identifier_dic[dep_table]])
+                if dep_table not in ['project', 'developmental_stage', 'organism_part', 'location', 'seq_centre', 'library_type', 'cv','seq_tech']:
+                    if dep_table in table_dic:
+                        dep_table_index = studyDAO.getIndex(dep_table, 'latest = 1  and '+table_identifier_dic[dep_table], table_dic[dep_table][table_identifier_dic[dep_table]])
                 else:
-                    dep_table_index = studyDAO.getIndex(dep_table, table_identifier_dic[dep_table], table_dic[dep_table][table_identifier_dic[dep_table]])
-            if len(dep_table_index) > 0 :
-                table_dic[table].update(dep_table_index[0])
+                    if dep_table in table_dic:
+                        dep_table_index = studyDAO.getIndex(dep_table, table_identifier_dic[dep_table], table_dic[dep_table][table_identifier_dic[dep_table]])
+            if dep_table in table_dic:
+                if len(dep_table_index) > 0 :
+                    table_dic[table].update(dep_table_index[0])
+                else:
+                    #get higest index
+                    max_ID = studyDAO.getmaxIndex(dep_table)
+                    if max_ID[0]['max('+dep_table+'_id)'] is not None:
+                        table_identifier = max_ID[0]['max('+dep_table+'_id)']+1
+                    else:
+                        table_identifier=1
+                    if dep_table not in ['project', 'developmental_stage', 'organism_part', 'location', 'seq_centre', 'library_type', 'cv', 'seq_tech']:
+                        field_str, value_str = dic_to_str(table_dic[dep_table], ", changed, latest, "+dep_table+"_id", ", '"+today+"', 1, "+str(table_identifier))
+                    else:
+                        field_str, value_str = dic_to_str(table_dic[dep_table], ", "+dep_table+"_id", ", "+str(table_identifier))
+                    try:
+                        studyDAO.populate_table(dep_table, "("+field_str+")", "("+value_str+")")
+                    except:
+                        logging.info("Could not insert the new dependent data in the database. Existing now")
+                    table_dic[table].update({dep_table+"_id": table_identifier})
+
     #add to data for table with single identifier
     if table != 'individual_data':
         #get higest index
@@ -245,7 +268,7 @@ def insert_field(table, table_dic , table_identifier_dic, dependent_list, verbos
         else:
             table_identifier=1
         #for table with latest and changed field
-        if table not in ['project', 'developmental_stage', 'organism_part', 'location', 'seq_centre', 'library_type', 'cv']:
+        if table not in ['project', 'developmental_stage', 'organism_part', 'location', 'seq_centre', 'library_type', 'cv', 'seq_tech']:
             field_str, value_str = dic_to_str(table_dic[table], ", changed, latest, "+table+"_id", ", '"+today+"', 1, "+str(table_identifier))
         else:
             field_str, value_str = dic_to_str(table_dic[table], ", "+table+"_id", ", "+str(table_identifier))
@@ -362,10 +385,10 @@ def add_annotations(table_eq_Annotations, studyDAO, category_Annotations, asso_d
         table_id = 'individual_id'
         update_term = ", changed = "+today+", "
         pop_term = "(individual_id, cv_id, value, changed)"
-        pop_value = "(" + str(asso_dic[table_id]) +", "+ str(cv_id) +", '"+raw_data['Annotations']['value']+"', "+ today +")"
+        pop_value = "(" + str(asso_dic[table_id]) +", "+ str(cv_id) +", '"+raw_data['Annotations']['value']+"', '"+ today +"')"
     update_field =  raw_data['Annotations']['value']+"'" + update_term
     #check if corresponding entry in annotations table
-    Annotations_data = studyDAO.getTableData(Annot_table, "*", "cv_id =  "+str(cv_id) +" and table_id  = " + str(asso_dic[table_id]))
+    Annotations_data = studyDAO.getTableData(Annot_table, "*", "cv_id =  "+str(cv_id) +" and "+table_id+"  = " + str(asso_dic[table_id]))
     if len(Annotations_data) > 0:
         if Annotations_data[0]['value'] == "":
             studyDAO.update(Annot_table, "value = " +"'"+update_field,  "cv_id =  "+str(cv_id) +" and table_id  = ", asso_dic[table_id])
@@ -391,17 +414,12 @@ def parse_spreadsheet(spread_path, studyDAO):
     start_read = 2
     #define header for each table according to spreadsheet url (create new one if different spreadsheet provided)
     if '1978536442' in spread_path:
-        eq_list=['individual-name','record-option','individual-alias','species-name','species-taxon_id','species-common_name','species-taxon_position','individual-sex',
+        eq_list=['individual-name','record-option','individual-alias', 'species-name','species-taxon_id','species-common_name','species-taxon_position','individual-sex',
         'developmental_stage-name','organism_part-name','individual-date_collected','image-filename','image-path','image-comment','project-name','project-alias',
         'project-ssid','project-accession', 'location-geographical_region','location-source_location','location-latitude','location-longitude',
         'material-name','material-accession','material-type', 'material-date_received','material-storage_condition','material-volume','provider-provider_name',
-        'cv-attribute','individual_data-value','individual_data-unit','individual_data-comment','sample-name', 'sample-accession','sample-sample_ssid','lane-name','lane-accession',
-        'library-ssid','library_type-name','file-name','file-accession','file-format', 'file-type','file-md5','file-nber_reads','seq_centre-name','Annotations-value', 'Annotations-category']
-        #'individual_name','alias','species_name','taxon_id','common_name','taxon_position','sex','developmental_name','organism_part','image_name','image_path',
-        #'image_source','project_name','project_alias','project_ssid','project_accession','geographical_region','source_location','latitude','longitude','material_name',
-        #'material_accession','material_type','date_received','storage_condition','volume','(ul)','provider_name','attribute','value','unit','comment','sample_name',
-        #'sample_accession','sample_id','lane_name','lane_accession','library_id','library_name','file_name','file_accession','format','paired-end','md5','nber_reads',
-        #'seq_centre','Other_annotations']
+        'cv-attribute','individual_data-value','individual_data-unit','individual_data-comment','sample-name', 'sample-accession','sample-ssid','lane-name','lane-accession',
+        'library_type-name', 'library-ssid','file-name','file-accession','file-format', 'file-type','file-md5','file-nber_reads','seq_centre-name','seq_tech-name','Annotations-value', 'Annotations-category']
         spreadsheet = 'input_template'
     #cases where data are available online (note for Google spreadsheet or else, the data need to be published as csv first)
     try:
@@ -432,9 +450,8 @@ def parse_spreadsheet(spread_path, studyDAO):
         if 'individual' in line_dic and len(line_dic['individual']['name']) > 0:
             individual_name=line_dic['individual']['name']
             if 'date_collected' in line_dic['individual'] and len(str(line_dic['individual']['date_collected'])) >0:
-                # (line_dic['individual']['date_collected'])
                 line_dic['individual']['date_collected'] = format_date(str(line_dic['individual']['date_collected']))
-                #populate material table
+            #populate material table
             if 'material' not in line_dic:
                 line_dic['material'] ={}
             if 'name' not in line_dic['material']:
@@ -460,12 +477,19 @@ def parse_spreadsheet(spread_path, studyDAO):
                     line_dic['file']['type']='PE'
             if 'cv' in line_dic and len(line_dic['cv']['attribute']) > 0:
                 line_dic['cv']['comment'] = 'entry extracted from input spreadsheet'
-            if 'location' in line_dic:
+            if 'location' in line_dic and (len(line_dic['location']['latitude']) > 0 and len(line_dic['location']['longitude']) >0):
                 line_dic['location'] = format_to_compare(line_dic['location'])
+            Line_dic=copy.deepcopy(line_dic)
+            for table in line_dic:
+                for field in line_dic[table]:
+                    if len(line_dic[table][field]) == 0:
+                        del Line_dic[table][field]
+                if len(Line_dic[table]) ==0:
+                    del Line_dic[table]
             if individual_name in spread_dic:
-                spread_dic[individual_name].append(line_dic)
+                spread_dic[individual_name].append(Line_dic)
             else:
-                spread_dic[individual_name] =[line_dic]
+                spread_dic[individual_name] =[Line_dic]
     return spread_dic, spreadsheet
 
 def parse_json(json_path, studyDAO):
@@ -555,10 +579,10 @@ def populate_database(raw_results, entry_name, studyDAO, verbose, mydbconn):
     '''
     identifier_dic = {'individual' : 'name', 'species' : 'name', 'material' : 'name', 'location' : 'source_location', 'ontology' : 'name', 'lane': 'accession',
      'file' : 'name', 'developmental_stage' : 'name', 'project': 'name', 'sample': 'name', 'image' : 'filename', 'organism_part': 'name', 'provider' : 'provider_name',
-     'cv' : 'attribute', 'seq_centre': 'name', 'library_type' : 'name', 'library' : 'ssid'}
-    dependent_table =  ['developmental_stage', 'organism_part', 'individual', 'image', 'material', 'sample', 'lane', 'library', 'individual_data']
-    dependent_dic={'developmental_stage':['ontology'], 'organism_part':['ontology'], 'individual' : ['species', 'developmental_stage', 'location'],
-    'material' : ['individual'], 'sample':['material'], 'library' : ['library_type'], 'lane' : ['seq_tech', 'sample', 'library'], 'file':['lane'],
+     'cv' : 'attribute', 'seq_centre': 'name', 'seq_tech' : 'name', 'library_type' : 'name', 'library' : 'ssid'}
+    dependent_table =  ['developmental_stage', 'organism_part', 'individual', 'image', 'material', 'sample', 'lane', 'library', 'individual_data', 'file']
+    dependent_dic={'developmental_stage':['ontology'], 'organism_part':['ontology'], 'individual' : ['species', 'location', 'developmental_stage', 'provider'],
+    'material' : ['individual', 'provider'], 'sample':['material'], 'library' : ['library_type'], 'lane' : ['seq_tech', 'sample', 'library', 'seq_centre'], 'file':['lane'],
     'image':['individual'], 'individual_data': ['individual', 'cv']}
     table_eq_Annotations ={'individual' : 'individual_data','material': 'material','morphology': 'individual_data','extraction': 'material',
     'sequencing':'sample','image': 'image', 'files' : 'file', 'lab_note' : 'material','general' : 'individual_data'}
@@ -575,44 +599,66 @@ def populate_database(raw_results, entry_name, studyDAO, verbose, mydbconn):
                 Id_overwrite_flag = ""
                 Id_update_flag = ""
                 ann_flag = ""
+                new_rec=0
+                print (raw_results[individual_name][index]['Annotations'])
                 if 'record' in raw_results[individual_name][index]:
-                    print ('yes')
+                    print (raw_results[individual_name][index]['record']['option'])
                     if raw_results[individual_name][index]['record']['option']=='update':
                         flag = False
                     else:
                         flag = True
+                    if raw_results[individual_name][index]['record']['option']=='new_record':
+                        new_rec=1
                     del raw_results[individual_name][index]['record']
                 table_list= (list(raw_results[individual_name][index].keys()))
+                #ensure that individual table is treated at the end as it has most dependencies
+                table_list.remove('individual')
+                table_list.append('individual')
+                print(table_list)
+                print(flag)
                 #remove Annotations and individual_data table to treat them separately
-                table_list.remove('Annotations')
-                table_list.remove('individual_data')
+                if 'Annotations' in table_list: table_list.remove('Annotations')
+                if 'individual_data' in table_list: table_list.remove('individual_data')
                 asso_dic={}
                 insert_dic={}
                 #go through the tables refered on the spreadsheet
                 for table in table_list:
-                    if table not in ['project', 'developmental_stage', 'organism_part', 'location', 'seq_centre', 'library_type', 'cv']:
+                    if table not in ['project', 'developmental_stage', 'organism_part', 'location', 'seq_centre', 'library_type', 'cv', 'seq_tech']:
                         db_table_data = studyDAO.getStudyData(table, "latest = 1 and "+identifier_dic[table], raw_results[individual_name][index][table][identifier_dic[table]])
                     else:
                         db_table_data = studyDAO.getStudyData(table, identifier_dic[table], raw_results[individual_name][index][table][identifier_dic[table]])
                     #case where data are already present in the database
                     if len(db_table_data) > 0:
+                        print("DATAARETHERE")
+                        print(db_table_data)
+                        print(asso_dic)
+                        print("" )
+                        #if table has table dependencies, update the raw data with the corresponding ids
+                        if table in dependent_table:
+                            for parent_table in dependent_dic[table]:
+                                if parent_table+"_id" in asso_dic:
+                                    raw_results[individual_name][index][table].update({parent_table+"_id":asso_dic[parent_table+"_id"]})
                         #only use field with data in the comparison
                         raw_dic = {k:v for k, v in raw_results[individual_name][index][table].items() if v != 'NULL'}
+                        print(raw_dic)
                         #ensure that latitude and longitude are correctly compared
                         if table == 'location':
                             db_table_data[-1] = format_to_compare(db_table_data[0])
                         #extract fields that are different
                         different_items = {k:v for k,v in raw_dic.items() if k in db_table_data[-1] and str(db_table_data[-1][k]) != str(raw_dic[k])}
+                        print(different_items)
                         #no different items: capture table_id in association dic (asso_dic)
                         if len(different_items) == 0:
-                            asso_dic[table+"_id"] = db_table_data[index][table+"_id"]
+                            asso_dic[table+"_id"] = db_table_data[0][table+"_id"]
                         #if there is difference: update, overwrite or insert
                         else:
                             #if flag: then overwrite (update) the record and keep the sample_id
                             if flag:
+                                print("OVERW")
                                 #update results in db
                                 table_id, update_flag = overwrite_field(table, db_table_data[-1], different_items,verbose, studyDAO)
                             else:
+                                print("UPDATE")
                                 #update previous record and create an updated one
                                 table_id, update_flag = update_field(table, db_table_data[-1], different_items,verbose, studyDAO)
                             if table_id != 0:
@@ -634,21 +680,30 @@ def populate_database(raw_results, entry_name, studyDAO, verbose, mydbconn):
                         studyDAO.populate_table("allocation", "(individual_id, project_id)",  "("+str(asso_dic['individual_id'])+","+ str(asso_dic['project_id'])+")")
                 #deal with individual_data
                 #get data for cv and individual identifiers
-                Ind_data_data = studyDAO.getTableData('individual_data', '*', 'individual_id = '+str(asso_dic['individual_id']) +' and cv_id = ' + str(asso_dic['cv_id']))
-                if len(Ind_data_data) > 0:
-                    raw_Id_dic = {k:v for k, v in raw_results[individual_name][index]['individual_data'].items() if v != 'NULL'}
-                    different_items = {k:v for k,v in raw_Id_dic.items() if k in Ind_data_data[0] and str(Ind_data_data[0][k]) != str(raw_Id_dic[k])}
-                    #no different items: capture table_id in association dic (asso_dic)
-                    if len(different_items) !=0:
-                        if flag:
-                            #update results in db - overwrite_field(table, dic, different_items, verbose, studyDAO):
-                            Id_id, Id_overwrite_flag = overwrite_field('individual_data', Ind_data_data[0], different_items,verbose, studyDAO)
-                        else:
-                            Id_id, Id_update_flag = update_field('individual_data', Ind_data_data[0], different_items,verbose, studyDAO)
-                        if Id_id != 0:
-                            asso_dic['individual_data_id'] = Id_id
-                else:
-                    table_id, Id_insert_flag = insert_field('individual_data', raw_results[individual_name][index], identifier_dic, ['individual', 'cv'], verbose, studyDAO)
+                if new_rec == 0:
+                    cv_data= studyDAO.getTableData("individual_data", "cv_id", "value = '" + raw_results[individual_name][index]['Annotations']['value'] +"';")
+                    asso_dic['cv_id'] = cv_data[0]['cv_id']
+                    Ind_data_data = studyDAO.getTableData('individual_data', '*', 'individual_id = '+str(asso_dic['individual_id']) +' and cv_id = ' + str(asso_dic['cv_id']))
+                    if len(Ind_data_data) > 0:
+                        print(Ind_data_data)
+                        print(raw_results[individual_name][index])
+                        if 'Annotations' in raw_results[individual_name][index] and raw_results[individual_name][index]['Annotations']['category']=='individual':
+                            raw_Id_dic = {k:v for k, v in raw_results[individual_name][index]['Annotations'].items() if v != 'NULL'}
+                            print(raw_Id_dic)
+                            different_items = {k:v for k,v in raw_Id_dic.items() if k in Ind_data_data[0] and str(Ind_data_data[0][k]) != str(raw_Id_dic[k])}
+                            #no different items: capture table_id in association dic (asso_dic)
+                            if len(different_items) !=0:
+                                if flag:
+                                    #update results in db - overwrite_field(table, dic, different_items, verbose, studyDAO):
+                                    Id_id, Id_overwrite_flag = overwrite_field('individual_data', Ind_data_data[0], different_items,verbose, studyDAO)
+                                else:
+                                    Id_id, Id_update_flag = update_field('individual_data', Ind_data_data[0], different_items,verbose, studyDAO)
+                                if Id_id != 0:
+                                    asso_dic['individual_data_id'] = Id_id
+                    else:
+                        print(raw_results[individual_name][index])
+                        print(identifier_dic)
+                        table_id, Id_insert_flag = insert_field('individual_data', raw_results[individual_name][index], identifier_dic, ['individual', 'cv'], verbose, studyDAO)
                 #deal with data in the Annotations fields
                 category_Annotations = raw_results[individual_name][index]['Annotations']['category']
                 value_Annotations = raw_results[individual_name][index]['Annotations']['value']
@@ -670,7 +725,7 @@ def populate_database(raw_results, entry_name, studyDAO, verbose, mydbconn):
     else:
         if all_flag.count("I") > 0 or all_flag.count("U") > 0:
             logging.info("Committing data from the "+raw_results_type+" "+entry_name+" to the database")
-            #mydbconn.commit()
+            mydbconn.commit()
 
 def main(programSetup):
     configSettings = programSetup.config
