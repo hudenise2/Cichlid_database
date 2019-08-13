@@ -408,7 +408,7 @@ def parse_spreadsheet(spread_path, studyDAO):
     if '1978536442' in spread_path:
         eq_list=['individual-name','record-option','individual-alias', 'species-name','species-taxon_id','species-common_name','species-taxon_position','individual-sex',
         'developmental_stage-name','organism_part-name','individual-date_collected','image-filename','image-path','image-comment','project-name','project-alias',
-        'project-ssid','project-accession', 'location-geographical_region','location-source_location','location-latitude','location-longitude',
+        'project-ssid','project-accession', 'location-country', 'location-location','location-sub_location','location-latitude','location-longitude',
         'material-name','material-accession','material-type', 'material-date_received','material-storage_condition','material-volume','provider-provider_name',
         'cv-attribute','individual_data-value','individual_data-unit','individual_data-comment','sample-name', 'sample-accession','sample-ssid','lane-name','lane-accession',
         'library_type-name', 'library-ssid','file-name','file-accession','file-format', 'file-type','file-md5','file-nber_reads','seq_centre-name','seq_tech-name','Annotations-value', 'Annotations-category']
@@ -483,6 +483,7 @@ def parse_spreadsheet(spread_path, studyDAO):
                 spread_dic[individual_name].append(Line_dic)
             else:
                 spread_dic[individual_name] =[Line_dic]
+    print(spread_dic)
     return spread_dic, spreadsheet
 
 def parse_json(json_path, studyDAO):
@@ -570,7 +571,7 @@ def populate_database(raw_results, entry_name, studyDAO, verbose, mydbconn):
     : input mydbconn (database connection_socket) connection to the Cichlid database
     : return none
     '''
-    identifier_dic = {'individual' : 'name', 'species' : 'name', 'material' : 'name', 'location' : 'source_location', 'ontology' : 'name', 'lane': 'accession',
+    identifier_dic = {'individual' : 'name', 'species' : 'name', 'material' : 'name', 'location' : 'location', 'ontology' : 'name', 'lane': 'accession',
      'file' : 'name', 'developmental_stage' : 'name', 'project': 'name', 'sample': 'name', 'image' : 'filename', 'organism_part': 'name', 'provider' : 'provider_name',
      'cv' : 'attribute', 'seq_centre': 'name', 'seq_tech' : 'name', 'library_type' : 'name', 'library' : 'ssid'}
     dependent_table =  ['developmental_stage', 'organism_part', 'individual', 'image', 'material', 'sample', 'lane', 'library', 'individual_data', 'file']
@@ -741,7 +742,7 @@ if __name__ == '__main__':
         description="Cichlid_db_update import input spreadsheet onto the Cichlid_TRACKING database")
     parser.add_argument("-o", "--overwrite", action ='store_true',
                         help="replace previous entries instead of updating the existent records")
-    parser.add_argument("-sp", "--spreadsheet", help="input")
+    parser.add_argument("-sp", "--spreadsheet", help="spreadsheet path or input")
     parser.add_argument("-j", "--jpath", help="path to json")
     parser.add_argument("-v", "--verbose", help="verbose mode", action = 'store_true')
     parser.add_argument("-c", "--config",
@@ -749,7 +750,7 @@ if __name__ == '__main__':
                         help="path to config file",
                         required=False,
                         metavar="configfile",
-                        default="Cichlid_Population_dbV4.json")
+                        default="Cichlid_Population_db.json")
 
     args = vars(parser.parse_args())
     #get today's date as DD-MM-YY
@@ -769,9 +770,12 @@ if __name__ == '__main__':
     end_url =""
     spath =""
     url ='https://docs.google.com/spreadsheets/d/e/2PACX-1vSoiTDfPrIDbMNMqt_0QYY-rLXXofBRaP38nuwcNbvTpwniaYadKLIiRuCwISPT60F4rWSNoY6pO82R/'
-    if args['spreadsheet'] == 'input':
-        end_url = 'pub?gid=1978536442'
-        spath = url+end_url
+    if 'spreadsheet' in args:
+        if args['spreadsheet'] == 'input':
+            end_url = 'pub?gid=1978536442'
+            spath = url+end_url
+        else:
+            spath = args['spreadsheet']
     jpath = args['jpath']
     verbose=False
     if args['verbose']: verbose= True
