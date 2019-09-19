@@ -403,27 +403,36 @@ def parse_spreadsheet(spread_path, studyDAO):
     countIndividual = 0
     individual_name =""
     spreadsheet = 'user spreadsheet'
-    start_read = 2
+    eq_list=['individual-name','record-option','individual-alias', 'species-name','species-taxon_id','species-common_name','species-taxon_position','individual-sex',
+    'developmental_stage-name','organism_part-name','individual-date_collected','image-filename','image-path','image-comment','project-name','project-alias',
+    'project-ssid','project-accession', 'location-country', 'location-location','location-sub_location','location-latitude','location-longitude',
+    'material-name','material-accession','material-type', 'material-date_received','material-storage_condition','material-volume','provider-provider_name',
+    'cv-attribute','individual_data-value','individual_data-unit','individual_data-comment','sample-name', 'sample-accession','sample-ssid','lane-name','lane-accession',
+    'library_type-name', 'library-ssid','file-name','file-accession','file-format', 'file-type','file-md5','file-nber_reads','seq_centre-name','seq_tech-name','Annotations-value', 'Annotations-category']
+
     #define header for each table according to spreadsheet url (create new one if different spreadsheet provided)
     if '1978536442' in spread_path:
-        eq_list=['individual-name','record-option','individual-alias', 'species-name','species-taxon_id','species-common_name','species-taxon_position','individual-sex',
-        'developmental_stage-name','organism_part-name','individual-date_collected','image-filename','image-path','image-comment','project-name','project-alias',
-        'project-ssid','project-accession', 'location-country', 'location-location','location-sub_location','location-latitude','location-longitude',
-        'material-name','material-accession','material-type', 'material-date_received','material-storage_condition','material-volume','provider-provider_name',
-        'cv-attribute','individual_data-value','individual_data-unit','individual_data-comment','sample-name', 'sample-accession','sample-ssid','lane-name','lane-accession',
-        'library_type-name', 'library-ssid','file-name','file-accession','file-format', 'file-type','file-md5','file-nber_reads','seq_centre-name','seq_tech-name','Annotations-value', 'Annotations-category']
         spreadsheet = 'input_template'
-    #cases where data are available online (note for Google spreadsheet or else, the data need to be published as csv first)
-    try:
-        connection_socket = urlopen(spread_path+'&output=tsv')
-        tsv_doc = connection_socket.read()
-        res= tsv_doc.decode("utf8")
-        connection_socket.close()
-    except:
-        logging.info("Could not find the spreadsheet at the url indicated. Existing now")
-        raise
+        #cases where data are available online (note for Google spreadsheet or else, the data need to be published as csv first)
+        try:
+            connection_socket = urlopen(spread_path+'&output=tsv')
+            tsv_doc = connection_socket.read()
+            res= tsv_doc.decode("utf8")
+            connection_socket.close()
+        except:
+            logging.info("Could not find the spreadsheet at the url indicated. Existing now")
+            raise
+        lines = res.split("\n")
+        start_read = 2
+    else:
+        spreadsheet = 'input_user'
+        file=open(spread_path, 'r')
+        lines=[]
+        for line in file:
+            lines.append(line)
+        start_read = 1
     spread_dic={}
-    lines = res.split("\n")
+    new_proj={}
     #avoid the first line (spreadsheet header)
     for line in lines[start_read:]:
         line=line.rstrip()
@@ -446,7 +455,7 @@ def parse_spreadsheet(spread_path, studyDAO):
             #populate material table
             if 'material' not in line_dic:
                 line_dic['material'] ={}
-            if 'name' not in line_dic['material']:
+            if 'name' not in line_dic['material'] or len(line_dic['material']['name'])==0:
                 line_dic['material']['name'] = line_dic['individual']['name']
             if 'date_received' in line_dic['material'] and len(str(line_dic['material']['date_received'])) >0:
                 line_dic['material']['date_received'] = format_date(str(line_dic['material']['date_received']))
@@ -471,6 +480,34 @@ def parse_spreadsheet(spread_path, studyDAO):
                 line_dic['cv']['comment'] = 'entry extracted from input spreadsheet'
             if 'location' in line_dic and (len(line_dic['location']['latitude']) > 0 and len(line_dic['location']['longitude']) >0):
                 line_dic['location'] = format_to_compare(line_dic['location'])
+            #added this section to cope with the absence of project accession (required for website)
+            if 'project' in line_dic and len(line_dic['project']['name']) > 0 and len(line_dic['project']['accession'])==0:
+                if line_dic['project']['name'] in new_proj:
+                    project_acc=new_proj[line_dic['project']['name']]
+                else:
+                    proj_acc = studyDAO.getTableData("project", "accession", "name ='"+line_dic['project']['name'] +"';" )
+                    if len(proj_acc) >0:
+                        project_acc=proj_acc[0]['accession']
+                    else:
+                        project_acc=""
+                if len(project_acc)==0:
+                    all_acc = studyDAO.getTableData("project", "accession", "accession like 'NYSUB%';" )
+                    if len(all_acc) >0:
+                        max_db_acc=max([x['accession'] for x in all_acc])
+                    else:
+                        max_db_acc=""
+                    max_new_acc=[max(x) for x in new_proj.values()]
+                    if len(max_db_acc) >0 or len(max_new_acc)>0:
+                        max_acc=[max(max_db_acc[0]['accession'], max_new_acc[0])][0][6:]
+                    else:
+                        max_acc="0"
+                    l=len(str(int(max_acc)+1))
+                    max_all_acc="0"*(4-l)+str(int(max_acc)+1)
+                    line_dic['project']['accession']="NYSUB"+max_all_acc
+                    new_proj[line_dic['project']['name']]=line_dic['project']['accession']
+                else:
+                    line_dic['project']['accession']=project_acc
+                    new_proj[line_dic['project']['name']]=project_acc
             Line_dic=copy.deepcopy(line_dic)
             for table in line_dic:
                 for field in line_dic[table]:
@@ -483,11 +520,11 @@ def parse_spreadsheet(spread_path, studyDAO):
                 spread_dic[individual_name].append(Line_dic)
             else:
                 spread_dic[individual_name] =[Line_dic]
-    print(spread_dic)
     return spread_dic, spreadsheet
 
 def parse_json(json_path, studyDAO):
     '''
+    THIS FUNCTION HAS NOT BEEN UPDATED
     function to open the json and reformat the data
     : input json_path (str) absolute path to the json file
     : input studyDAO (connection object) object to connect to the database
@@ -599,7 +636,7 @@ def populate_database(raw_results, entry_name, studyDAO, verbose, mydbconn):
                         flag = False
                     else:
                         flag = True
-                    if raw_results[individual_name][index]['record']['option']=='new_record':
+                    if raw_results[individual_name][index]['record']['option']=='insert':
                         new_rec=1
                     del raw_results[individual_name][index]['record']
                 table_list= (list(raw_results[individual_name][index].keys()))
@@ -663,6 +700,7 @@ def populate_database(raw_results, entry_name, studyDAO, verbose, mydbconn):
                 #deal with individual_data
                 #get data for cv and individual identifiers
                 if new_rec == 0:
+                    #if 'Annotations' in raw_results[individual_name][index] :
                     cv_data= studyDAO.getTableData("individual_data", "cv_id", "value = '" + raw_results[individual_name][index]['Annotations']['value'] +"';")
                     asso_dic['cv_id'] = cv_data[0]['cv_id']
                     Ind_data_data = studyDAO.getTableData('individual_data', '*', 'individual_id = '+str(asso_dic['individual_id']) +' and cv_id = ' + str(asso_dic['cv_id']))
@@ -681,6 +719,34 @@ def populate_database(raw_results, entry_name, studyDAO, verbose, mydbconn):
                                     asso_dic['individual_data_id'] = Id_id
                     else:
                         table_id, Id_insert_flag = insert_field('individual_data', raw_results[individual_name][index], identifier_dic, ['individual', 'cv'], verbose, studyDAO)
+                else:
+                    if 'individual_data' in raw_results[individual_name][index]:
+                        value='None'
+                        unit='None'
+                        comment='None'
+                        cv_data=""
+                        cv_attribute=""
+                        if 'value' in raw_results[individual_name][index]['individual_data']: value = raw_results[individual_name][index]['individual_data']['value']
+                        if 'unit' in raw_results[individual_name][index]['individual_data']: unit = raw_results[individual_name][index]['individual_data']['unit']
+                        if 'comment' in raw_results[individual_name][index]['individual_data']: comment = raw_results[individual_name][index]['individual_data']['comment']
+                        #get the cv_id if existing
+                        if unit.lower() in ['g', 'kg', 'gram', 'grams', 'kilogram', 'kilograms']:
+                            cv_data = studyDAO.getTableData("cv", "cv_id", "attribute = 'weight'")
+                            cv_attribute="weight"
+                        elif unit.lower() in ['ml', 'l', 'cl', 'millilitre', 'litre', 'centilitre', 'microlitre', 'ul']:
+                            cv_data = studyDAO.getTableData("cv", "cv_id", "attribute = 'volume'")
+                            cv_attribute="volume"
+                        elif len(comment) > 0:
+                            cv_data = studyDAO.getTableData("cv", "cv_id", "attribute = 'notes' and comment = 'entry for table individual_data'")
+                            cv_attribute="notes"
+                        if len(cv_data) ==  0:
+                            studyDAO.populate_table("cv", "(attribute)",  cv_attribute)
+                            cv_data = studyDAO.getTableData("cv", "cv_id", "attribute = "+ cv_attribute)
+                        cv_id = cv_data[0]['cv_id']
+                        id_data = studyDAO.getTableData("individual_data", "row_id", "individual_id = "+str(asso_dic['individual_id'])+ " and cv_id ="+str(cv_id))
+                        if len(id_data)==0:
+                            field_str, value_str=dic_to_str({"individual_id":str(asso_dic['individual_id']), "cv_id":str(cv_id)}, ", value, unit, comment, changed, latest", ", "+str(value)+","+unit+",'"+comment+"', '"+today+"', 1")
+                            studyDAO.populate_table("individual_data", "("+field_str+")", "("+value_str+")")
                 #deal with data in the Annotations fields
                 if 'Annotations' in raw_results[individual_name][index]:
                     category_Annotations = raw_results[individual_name][index]['Annotations']['category']
@@ -727,7 +793,7 @@ def main(programSetup):
         raw_j_results, json_name = parse_json(jpath, studyDAO)
         populate_database(raw_j_results, json_name, studyDAO, verbose, mydbconn)
     #call for spreadsheet parsing and inserting/updating
-    if len(spath) >0:
+    if spath:
         #open spreadsheet url
         if verbose:
             logging.info("Opening the spreadsheet url")
