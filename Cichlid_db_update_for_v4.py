@@ -426,7 +426,7 @@ def parse_spreadsheet(spread_path, studyDAO):
         start_read = 2
     else:
         spreadsheet = 'input_user'
-        file=open(spread_path, 'r')
+        file=open(spread_path, 'r', encoding='utf8',errors='replace')
         lines=[]
         for line in file:
             lines.append(line)
@@ -524,7 +524,7 @@ def parse_spreadsheet(spread_path, studyDAO):
 
 def parse_json(json_path, studyDAO):
     '''
-    THIS FUNCTION HAS NOT BEEN UPDATED
+    !!!THIS FUNCTION HAS NOT BEEN UPDATED !!!!
     function to open the json and reformat the data
     : input json_path (str) absolute path to the json file
     : input studyDAO (connection object) object to connect to the database
@@ -613,7 +613,7 @@ def populate_database(raw_results, entry_name, studyDAO, verbose, mydbconn):
      'cv' : 'attribute', 'seq_centre': 'name', 'seq_tech' : 'name', 'library_type' : 'name', 'library' : 'ssid'}
     dependent_table =  ['developmental_stage', 'organism_part', 'individual', 'image', 'material', 'sample', 'lane', 'library', 'individual_data', 'file']
     dependent_dic={'developmental_stage':['ontology'], 'organism_part':['ontology'], 'individual' : ['species', 'location', 'provider'],
-    'material' : ['individual', 'provider', 'developmental_stage', ], 'sample':['material'], 'library' : ['library_type'], 'lane' : ['seq_tech', 'sample','library', 'seq_centre'],
+    'material' : ['individual', 'provider', 'developmental_stage', 'organism_part'], 'sample':['material'], 'library' : ['library_type'], 'lane' : ['seq_tech', 'sample','library', 'seq_centre'],
     'file':['lane'], 'image':['individual'], 'individual_data': ['individual', 'cv']}
     table_eq_Annotations ={'individual' : 'individual_data','material': 'material','morphology': 'individual_data','extraction': 'material',
     'sequencing':'sample','image': 'image', 'files' : 'file', 'lab_note' : 'material','general' : 'individual_data'}
