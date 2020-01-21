@@ -42,19 +42,24 @@ def adjust_header_list(line):
     full_header_list=['record-option','individual-name','individual-alias', 'individual-sex', 'species-name','species-taxon_id','species-common_name','species-taxon_position',
      'individual-date_collected', 'individual-collection_method', 'individual-collection_details','provider-provider_name', 'location-country_of_origin', 'location-location',
      'location-sub_location','location-latitude','location-longitude','developmental_stage-name', 'individual_data-weight', 'individual_data-unit', 'organism_part-name',
-     'individual-comment', 'image-filename','image-filepath','image-comment', 'material-name','material-accession','material-type', 'material-date_received','material-storage_condition',
+     'individual-comment', 'image-filename','image-filepath','image-comment', 'image-licence','material-name','material-accession','material-type', 'material-date_received','material-storage_condition',
      'material-amount','material-unit', 'material-comment', 'provider-provider_name','project-name', 'project-alias', 'project-ssid','project-accession',
      'sample-name', 'sample-accession','sample-ssid','sample-comment', 'lane-name','lane-accession', 'library_type-name', 'library-ssid','file-name','file-accession','file-format',
      'file-type','file-md5', 'file-location','file-comment', 'file-nber_reads', 'seq_centre-name','seq_tech-name']
     full_column_list=['option', 'individual_name', 'alias', 'sex', 'species_name', 'taxon_id', 'common_name', 'taxon_position', 'date_collected', 'collection_method', 'collection_details',
      'collector_name', 'country', 'location', 'location_details', 'latitude', 'longitude', 'developmental_name', 'individual_weight', 'unit', 'organism_part', 'individual_comment', 'image_name',
-     'image_path', 'image_comment', 'material_name', 'material_accession', 'material_type', 'date_received', 'storage_condition', 'material_amount', 'amount_unit', 'material_comment',
-     'material_provider_name', 'project_name', 'project_alias', 'project_ssid', 'project_accession', 'sample_name', 'sample_accession', 'sample_id', 'sample_comment', 'lane_name', 'lane_accession', 'library_name', 'library_id', 'file_name', 'file_accession', 'format', 'paired-end', 'md5', 'filepath', 'file_comment', 'nber_reads', 'seq_centre', 'seq_tech']
+     'image_path', 'image_comment', 'image_licence', 'material_name', 'material_accession', 'material_type', 'date_received', 'storage_condition', 'material_amount', 'material_unit', 'material_comment',
+     'material_provider_name', 'project_name', 'project_alias', 'project_ssid', 'project_accession', 'sample_name', 'sample_accession', 'sample_ssid', 'sample_comment', 'lane_name', 'lane_accession',
+     'library_name', 'library_ssid', 'file_name', 'file_accession', 'format', 'paired-end', 'md5', 'filepath', 'file_comment', 'nber_reads', 'seq_centre', 'seq_tech']
     #create list of indexes for the column present in the spreadsheet
-    index_list=[full_column_list.index(k) for k in line.split("\t") if k != "''"]
+    if line.startswith('HEADER'):
+        LINE=line.split(',')[1:]
+        index_list=[full_column_list.index(k) for k in LINE if k != "''"]
+    else:
+        index_list=[full_column_list.index(k) for k in line.split("\t") if k != "''"]
     #create list of corresponding headers
     header_list=[full_header_list[k] for k in index_list]
-    if verbose and len(full_header_list) != len(header_list): logging.info(" header adjusted from "+str(len(full_header_list)) +" columns to "str(len(header_list))+" columns."
+    if verbose and len(full_header_list) != len(header_list): logging.info(" header adjusted from "+str(len(full_header_list)) +" columns to "+str(len(header_list))+" columns.")
     return header_list
 
 def compare_and_overwrite_data(table, new_data, database_data, index_dic, cv_id, studyDAO):
@@ -430,19 +435,20 @@ def insert_entry(new_data, annotations_data, studyDAO):
             if table=='individual':
                 previous_name=new_data[table]['name']
                 #get data already in database
-                names=studyDAO.getTableData(table, "name", "name like '"+new_data[table]["name"]+"%' and latest=1")
-                existing_names=[k['name'] for k in names]
-                #create suitable suffix to ensure that new entry has unique name
-                if len(existing_names)==1:
-                    new_data[table]['name']=existing_names+"[2]"
-                else:
-                    suffixes=[int(k[k.index("[")+1:-1]) for k in existing_names if "[" in k]
-                    max_value=max(suffixes)
-                    new_data[table]['name']=new_data[table]["name"]+"["+str(max_value+1)+"]"
-                #replace material_name if new individual name was created
-                if 'material' in new_data and previous_name==new_data['material']['name']:
-                    new_data['material']['name']=new_data[table]['name']
-                if verbose and previous_name!=new_data[table]['name'] : logging.info("  C2 -individual name changed from "+ str(previous_name)+" to "+new_data[table]['name'])
+                names=studyDAO.getTableData(table, "name", "name like '"+previous_name+"%' and latest=1")
+                if len(names) > 0:
+                    existing_names=[k['name'] for k in names]
+                    #create suitable suffix to ensure that new entry has unique name
+                    if len(existing_names)==1:
+                        new_data[table]['name']=existing_names[0]+"[2]"
+                    else:
+                        suffixes=[int(k[k.index("[")+1:-1]) for k in existing_names if "[" in k]
+                        max_value=max(suffixes)
+                        new_data[table]['name']=new_data[table]["name"]+"["+str(max_value+1)+"]"
+                    #replace material_name if new individual name was created
+                    if 'material' in new_data and previous_name==new_data['material']['name']:
+                        new_data['material']['name']=new_data[table]['name']
+                    if verbose and previous_name!=new_data[table]['name'] : logging.info("  C2 -individual name changed from "+ str(previous_name)+" to "+new_data[table]['name'])
                 #insert the new individual data
                 linked_dic={k+"_id":v for k,v in database_data.items() if k in dependent_dic[table]}
                 link_attr, val_attr = dic_to_str(linked_dic)
@@ -641,7 +647,8 @@ def parse_spreadsheet(spread_path, studyDAO):
         spreadsheet = 'input_template'
         #cases where data are available online (note for Google spreadsheet or else, the data need to be published as csv first)
         try:
-            connection_socket = urlopen(spread_path+'&output=tsv')
+            print(spread_path)
+            connection_socket = urlopen(spread_path)
             tsv_doc = connection_socket.read()
             res= tsv_doc.decode("utf8")
             connection_socket.close()
@@ -649,25 +656,30 @@ def parse_spreadsheet(spread_path, studyDAO):
             logging.info("Could not find the spreadsheet at the url indicated. Existing now")
             raise
         lines = res.split("\n")
-        start_read = 2
+        header_list=adjust_header_list(lines[0].rstrip())
+        start_read = 1
     else:
         spreadsheet = 'input_user'
         file=open(spread_path, 'r', encoding='utf8',errors='replace')
         lines=[]
         for line in file:
-            if line.startswith('option'):
+            if line.startswith('option') or line.startswith('HEADER'):
                 header_list=adjust_header_list(line.rstrip())
             else:
                 lines.append(line)
         start_read = 0
     #avoid the spreadsheet header
     for line in lines[start_read:2]:
+        print(line)
         line=line.rstrip()
         line_dic={}
         annotation_entry_dic={}
         #to avoid issue with apostrophe in field. Need to be updated with a better solution?
         line=line.replace("'","\"")
-        dataline=line.split("\t")
+        if line.startswith('EXAMPLE'):
+            dataline=line.split(",")[1:]
+        else:
+            dataline=line.split("\t")
         #parse the spreadsheet into table and field (after removing leading and trailing space(s))
         for index in range(0,len(dataline)):
             table = header_list[index].split("-")[0]
@@ -793,9 +805,9 @@ def transform_weight_unit(data_dic):
     dic_keys=list(data_dic.keys())
     #after removing the unit key, dic_keys will be weight / value depending of data_dic
     dic_keys.remove('unit')
-    if data_dic['unit'].lower() =='g':
-        new_weight=data_dic[dic_keys[0]]
-    elif data_dic['unit'].lower() =='mg':
+    #if data_dic['unit'].lower() =='g':
+    new_weight=data_dic[dic_keys[0]]
+    if data_dic['unit'].lower() =='mg':
         new_weight=float(data_dic[dic_keys[0]])/1000
     elif data_dic['unit'].lower() =='ug' or data_dic['unit'].lower() =='µg':
         new_weight=float(data_dic[dic_keys[0]])/1000000
