@@ -43,7 +43,7 @@ def adjust_header_list(line):
      'individual-date_collected', 'individual-collection_method', 'individual-collection_details','provider-provider_name', 'location-country_of_origin', 'location-location',
      'location-sub_location','location-latitude','location-longitude','developmental_stage-name', 'individual_data-weight', 'individual_data-unit', 'organism_part-name',
      'individual-comment', 'image-filename','image-filepath','image-comment', 'image-licence','material-name','material-accession','material-type', 'material-date_received',
-     'material-storage_condition', 'material-storage_location', 'material-amount','material-unit', 'material-comment', 'provider-provider_name','project-name',
+     'material-storage_condition', 'material-storage_location', 'material-amount','material-unit', 'material-comment', 'mat_provider-provider_name','project-name',
      'project-alias', 'project-ssid','project-accession', 'sample-name', 'sample-accession','sample-ssid','sample-comment', 'lane-name','lane-accession', 'library_type-name',
      'library-ssid','file-name','file-accession','file-format', 'file-type','file-md5', 'file-location','file-comment', 'file-nber_reads', 'seq_centre-name','seq_tech-name']
     full_column_list=['option', 'individual_name', 'alias', 'sex', 'species_name', 'taxon_id', 'common_name', 'taxon_position', 'date_collected', 'collection_method', 'collection_details',
@@ -68,10 +68,10 @@ def compare_and_overwrite_data(table, new_data, database_data, index_dic, cv_id,
     update_flag=0
     dependent_table =  ['developmental_stage', 'organism_part', 'individual', 'image', 'material', 'sample', 'lane', 'library', 'individual_data', 'file', 'table']
     dependent_dic={'developmental_stage':['ontology'], 'organism_part':['ontology'], 'individual' : ['species', 'location', 'provider'],
-     'material' : ['individual', 'provider', 'developmental_stage', 'organism_part'], 'sample':['material'], 'library' : ['library_type'], 'lane' : ['seq_tech', 'sample','library', 'seq_centre'],
+     'material' : ['individual', 'mat_provider', 'developmental_stage', 'organism_part'], 'sample':['material'], 'library' : ['library_type'], 'lane' : ['seq_tech', 'sample','library', 'seq_centre'],
      'file':['lane'], 'image':['individual'], 'individual_data': ['individual', 'cv'], 'table' : ['table_name', 'table_id']}
     identifier_dic = {'individual' : 'name', 'species' : 'name', 'material' : 'name', 'location' : 'location', 'ontology' : 'name', 'lane': 'accession',
-      'file' : 'name', 'developmental_stage' : 'name', 'project': 'name', 'sample': 'name', 'image' : 'filename', 'organism_part': 'name', 'provider' : 'provider_name',
+      'file' : 'name', 'developmental_stage' : 'name', 'project': 'name', 'sample': 'name', 'image' : 'filename', 'organism_part': 'name', 'provider' : 'provider_name', 'mat_provider' : 'provider_name',
       'cv' : 'attribute', 'seq_centre': 'name', 'seq_tech' : 'name', 'library_type' : 'name', 'library' : 'ssid', 'annotations': 'table+table_id'}
     if verbose: logging.info("  => compare and overwrite data")
     #check if the data are the same between new_data and database_data
@@ -368,13 +368,24 @@ def get_database_data(data, studyDAO, flag):
     table_list.append('individual')
     #remove and individual_data table to treat them separately
     if 'individual_data' in table_list: table_list.remove('individual_data')
+    #deal with case where provider is provider for both individual and material table (if last case, 'mat_provider' will be present in table_list)
+    if 'mat_provider' in table_list:
+        material_provider=data["mat_provider"]
+        table_list.remove("mat_provider")
+        mat_provider=studyDAO.getIndex("provider", "provider_name", "'"+material_provider["provider_name"]+"'")
+        #if provider_name is present into the db, add index to database_dic otherwise, insert name into the provider table before geting the index
+        if len(mat_provider) == 0:
+            studyDAO.populate_table("provider", "(provider_name, changed, latest)", "('"+material_provider["provider_name"]+"', '"+today+"', 1)")
+            mat_provider=studyDAO.getIndex("provider", "provider_name", "'"+material_provider["provider_name"]+"'")
+        database_dic["mat_provider"]=mat_provider[0]["provider_id"]
     asso_dic={}
     insert_dic={}
     #go through the tables refered on the spreadsheet
     for table in table_list:
         #get all data  for the entry using the identifier (latest entry if the field 'latest' is present)|
         if table not in ['project', 'developmental_stage', 'organism_part', 'location', 'seq_centre', 'library_type', 'seq_tech', 'individual']:
-            db_table_data = studyDAO.getStudyData(table, "latest = 1 and "+identifier_dic[table], data[table][identifier_dic[table]])
+            if identifier_dic[table] in data[table]:
+                db_table_data = studyDAO.getStudyData(table, "latest = 1 and "+identifier_dic[table], data[table][identifier_dic[table]])
         elif table=='individual':
             #if there is several individual with the same name, check which one need to be evaluated and eventually updated
             #alias has to be used also to define individual; if no alias, then species_id & sex could be used
@@ -384,7 +395,7 @@ def get_database_data(data, studyDAO, flag):
                 db_table_data = studyDAO.getStudyData(table, identifier_dic[table]+" like '" +data[table][identifier_dic[table]]+"%' and latest", '1')
         else:
             identifier=identifier_dic[table]
-            if table == 'location':
+            if table == 'location' and 'location' in data[table]:
                 value = data[table]['location']
                 data_location = dict(data[table])
                 del data_location['location']
@@ -395,7 +406,8 @@ def get_database_data(data, studyDAO, flag):
         #if data are already present in the database  and return dic with id or data depending on the flag
         if len(db_table_data) > 0:
             if flag=='I':
-                database_dic[table]=db_table_data[0][table+"_id"]
+                if table+"_id" in db_table_data[0]:
+                    database_dic[table]=db_table_data[0][table+"_id"]
             elif flag=='U' or flag=='O':
                 database_dic[table]=db_table_data[0]
     if verbose: logging.info("      + "+str(database_dic))
@@ -456,7 +468,7 @@ def insert_entry(new_data, annotations_data, studyDAO):
                 check_statement = prepare_update(original_new_individual_data)
                 #get data already in database
                 # check if there is entry with all parameters from submitted data
-                param_name=studyDAO.getStudyData(table, "latest", "1' and "+ check_statement.replace(", "," and ")+" and  name like '"+previous_name+"%")
+                param_name=studyDAO.getStudyData(table, "latest", "1' and "+ check_statement.replace(", "," and ")+" and name like '"+previous_name+"%")
                 # if there is no results with all parameters so check if alias can be used for identity
                 if len(param_name)==0 and 'alias' in new_data[table]:
                         param_name=studyDAO.getStudyData(table, "latest", "1' and alias ='"+new_data[table]['alias']+"' and  name like '"+previous_name+"%")
@@ -486,12 +498,12 @@ def insert_entry(new_data, annotations_data, studyDAO):
                         # there is no entry in database so create new entry
                         new_name_flag+=1
                 if new_name_flag !=0:
-                    if verbose: logging.info("  C2 -individual name changed to "+new_dic['individual']['name'])
+                    if verbose: logging.info("  C2 -individual name changed to "+new_data['individual']['name'])
                     #insert the new individual data
                     linked_dic={k+"_id":v for k,v in database_data.items() if k in dependent_dic[table]}
                     link_attr, val_attr = dic_to_str(linked_dic)
                     previous_index=studyDAO.getmaxIndex(table)[0]['max('+table+'_id)']
-                    if verbose: logging.info("  C3 - inserting data table: "+table+": "+str(new_dic))
+                    if verbose: logging.info("  C3 - inserting data table: "+table+": "+str(new_data))
                     insert_data(table, new_data[table], previous_index, ", individual_id, "+link_attr, ", "+str(previous_index+1)+", "+val_attr, studyDAO)
                     database_data["individual"]=previous_index+1
                     #populate the allocation table
@@ -536,6 +548,16 @@ def insert_entry(new_data, annotations_data, studyDAO):
                     if 'unit' in dep_field and 'weight' in dep_field:
                         insert_data(table, new_data[table], index, field+ dep_field, index+dep_data, studyDAO)
                 else:
+                    #deal with case where provider name is provided for the material
+                    if table =="material" and "material" in new_data:
+                        #if provider is provided, it will be added otherwise let blank.
+                        prov_index=dep_field.split(",").index('provider_id')
+                        list_dep_data=dep_data.split(",")
+                        if "mat_provider" in database_data:
+                                list_dep_data[prov_index]=str(database_data['mat_provider'])
+                        else:
+                                list_dep_data[prov_index]='NULL'
+                        dep_data=",".join(list_dep_data)
                     insert_data(table, new_data[table], index, field+ dep_field, index+dep_data, studyDAO)
                 insert_flag+=1
                 #update database_data accordigly
