@@ -39,19 +39,21 @@ usage: Cichlid_db_update.py automates entry of data from input template spreadsh
 
 def adjust_header_list(line):
     '''To cope with the fact that not all fields will be present in data to upload '''
-    full_header_list=['record-option','individual-name','individual-alias', 'individual-sex', 'species-name','species-taxon_id','species-common_name','species-taxon_position',
-     'individual-date_collected', 'individual-collection_method', 'individual-collection_details','provider-provider_name', 'location-country_of_origin', 'location-location',
-     'location-sub_location','location-latitude','location-longitude','developmental_stage-name', 'individual_data-weight', 'individual_data-unit', 'organism_part-name',
-     'individual-comment', 'image-filename','image-filepath','image-comment', 'image-licence','material-name','material-accession','material-type', 'material-date_received',
-     'material-storage_condition', 'material-storage_location', 'material-amount','material-unit', 'material-comment', 'mat_provider-provider_name','project-name',
-     'project-alias', 'project-ssid','project-accession', 'sample-name', 'sample-accession','sample-ssid','sample-comment', 'lane-name','lane-accession', 'library_type-name',
-     'library-ssid','file-name','file-accession','file-format', 'file-type','file-md5', 'file-location','file-comment', 'file-nber_reads', 'seq_centre-name','seq_tech-name']
-    full_column_list=['option', 'individual_name', 'alias', 'sex', 'species_name', 'taxon_id', 'common_name', 'taxon_position', 'date_collected', 'collection_method', 'collection_details',
-     'collector_name', 'country', 'location', 'location_details', 'latitude', 'longitude', 'developmental_name', 'individual_weight', 'unit', 'organism_part', 'individual_comment', 'image_name',
-     'image_path', 'image_comment', 'image_licence', 'material_name', 'material_accession', 'material_type', 'date_received', 'storage_condition', 'material_location',
-     'material_amount', 'material_unit', 'material_comment', 'material_provider_name', 'project_name', 'project_alias', 'project_ssid', 'project_accession', 'sample_name', 'sample_accession',
-     'sample_ssid', 'sample_comment', 'lane_name', 'lane_accession', 'library_name', 'library_ssid', 'file_name', 'file_accession', 'format', 'paired-end', 'md5', 'filepath', 'file_comment',
-     'nber_reads', 'seq_centre', 'seq_tech']
+    full_column_list=['option', 'individual_name', 'alias', 'species_name', 'taxon_id', 'common_name', 'taxon_position', 'date_collected', 'collection_method',
+     'collection_details', 'collector_name', 'country', 'location', 'location_details', 'latitude', 'longitude', 'sex', 'developmental_name', 'individual_weight',
+     'unit', 'individual_comment', 'material_name', 'material_accession', 'organism_part', 'material_type', 'storage_condition', 'material_location',
+     'material_amount', 'material_unit', 'material_provider_name', 'material_comment', 'date_received', 'image_name', 'image_path', 'image_comment',
+     'image_licence', 'project_name', 'project_alias', 'project_ssid', 'project_accession', 'sample_name', 'sample_accession', 'sample_ssid', 'sample_comment',
+     'lane_name', 'lane_accession', 'library_name', 'library_ssid', 'seq_centre', 'seq_tech', 'paired-end', 'file_name', 'format', 'file_accession', 'md5',
+     'filepath', 'nber_reads', 'nber_bases', 'avg_length', 'file_comment']
+    full_header_list=['record-option','individual-name','individual-alias', 'species-name','species-taxon_id','species-common_name','species-taxon_position',
+     'individual-date_collected', 'individual-collection_method', 'individual-collection_details','provider-provider_name', 'location-country_of_origin',
+     'location-location',   'location-sub_location','location-latitude','location-longitude', 'individual-sex','developmental_stage-name','individual_data-weight',
+     'individual_data-unit',   'individual-comment','material-name','material-accession', 'organism_part-name','material-type',   'material-storage_condition',
+     'material-storage_location', 'material-amount','material-unit', 'mat_provider-provider_name', 'material-comment', 'material-date_received', 'image-filename',
+     'image-filepath','image-comment', 'image-licence','project-name',   'project-alias', 'project-ssid','project-accession', 'sample-name', 'sample-accession',
+     'sample-ssid','sample-comment', 'lane-name','lane-accession', 'library_type-name',   'library-ssid', 'seq_centre-name','seq_tech-name', 'file-type',
+     'file-name','file-format','file-accession','file-md5', 'file-location', 'file-nber_reads','file-total_length', 'file-average_length', 'file-comment']
     #create list of indexes for the column present in the spreadsheet
     if line.startswith('HEADER'):
         LINE=line.split("\t")[1:]
@@ -418,6 +420,9 @@ def insert_data(table, table_data, index, field_attribute, data_attribute, study
     if verbose: logging.info("      + inserting data into database for table "+table)
     #prepare data to insert depending the nature of the table
     if table not in ['project', 'developmental_stage', 'organism_part', 'location', 'seq_centre', 'library_type', 'cv', 'seq_tech', 'allocation', 'annotations']:
+        if field_attribute.endswith(", "):
+            field_attribute=field_attribute[:-2]
+            data_attribute=data_attribute[:-2]
         field_str, value_str = dic_to_str(table_data, field_attribute+", changed, latest ", data_attribute+", '"+today+"', 1")
     else:
         if isinstance(index, int):
@@ -427,6 +432,7 @@ def insert_data(table, table_data, index, field_attribute, data_attribute, study
     try:
         studyDAO.populate_table(table, "("+field_str+")", "("+value_str+")")
     except:
+        logging.info(field_str+" ------ "+ value_str)
         logging.info("Could not insert the new dependent data in table "+table+" the database. Existing now")
         sys.exit()
     if verbose: logging.info("      + data: "+field_str+", "+value_str)
@@ -454,8 +460,8 @@ def insert_entry(new_data, annotations_data, studyDAO):
         if verbose: logging.info("  C1 - inserting entry for dependent_table: "+table)
         #dictionary of table and their dependencies
         dependent_dic={'developmental_stage':['ontology'], 'organism_part':['ontology'], 'individual' : ['species', 'location', 'provider'],
-        'material' : ['individual', 'provider', 'developmental_stage', 'organism_part'], 'sample':['material'], 'library' : ['library_type'], 'lane' : ['seq_tech', 'sample','library', 'seq_centre'],
-        'file':['lane'], 'image':['individual'], 'individual_data': ['individual', 'cv']}
+        'material' : ['individual', 'provider', 'developmental_stage', 'organism_part'], 'sample':['material'], 'library' : ['library_type'],
+        'lane' : ['seq_tech', 'sample','library', 'seq_centre'], 'file':['lane'], 'image':['individual'], 'individual_data': ['individual', 'cv']}
         input_name=spath.split("/")[-1]
         if table in new_data:
             #individual name has to be unique. Therefore suffix has to be added if same name when flag is new_record
@@ -468,7 +474,12 @@ def insert_entry(new_data, annotations_data, studyDAO):
                 check_statement = prepare_update(original_new_individual_data)
                 #get data already in database
                 # check if there is entry with all parameters from submitted data
-                param_name=studyDAO.getStudyData(table, "latest", "1' and "+ check_statement.replace(", "," and ")+" and name like '"+previous_name+"%")
+                param_statement = check_statement.replace(", "," and ")
+                if len(param_statement) > 1:
+                    param_statement=" and "+param_statement + " and"
+                else:
+                    param_statement=" and "
+                param_name=studyDAO.getStudyData(table, "latest", "1'"+ param_statement+" name like '"+previous_name+"%")
                 # if there is no results with all parameters so check if alias can be used for identity
                 if len(param_name)==0 and 'alias' in new_data[table]:
                         param_name=studyDAO.getStudyData(table, "latest", "1' and alias ='"+new_data[table]['alias']+"' and  name like '"+previous_name+"%")
@@ -534,7 +545,7 @@ def insert_entry(new_data, annotations_data, studyDAO):
                 dep_data=",".join([str(x) for x in dep_dic.values()])
                 #insert data onto table: get index, prepare arguments then insert
                 if table !='individual_data':
-                    index=","+str(studyDAO.getmaxIndex(table)[0]['max('+table+'_id)'] +1 )+","
+                    index=","+str(studyDAO.getmaxIndex(table)[0]['max('+table+'_id)'] +1 )+", "
                     field=","+table+"_id, "
                 else:
                     #if individual_data, there is no 'table_id' so adjust arguments
@@ -551,13 +562,14 @@ def insert_entry(new_data, annotations_data, studyDAO):
                     #deal with case where provider name is provided for the material
                     if table =="material" and "material" in new_data:
                         #if provider is provided, it will be added otherwise let blank.
-                        prov_index=dep_field.split(",").index('provider_id')
-                        list_dep_data=dep_data.split(",")
-                        if "mat_provider" in database_data:
+                        if 'provider_id' in dep_field:
+                           prov_index=dep_field.split(",").index('provider_id')
+                           list_dep_data=dep_data.split(",")
+                           if "mat_provider" in database_data:
                                 list_dep_data[prov_index]=str(database_data['mat_provider'])
-                        else:
+                           else:
                                 list_dep_data[prov_index]='NULL'
-                        dep_data=",".join(list_dep_data)
+                           dep_data=",".join(list_dep_data)
                     insert_data(table, new_data[table], index, field+ dep_field, index+dep_data, studyDAO)
                 insert_flag+=1
                 #update database_data accordigly
@@ -791,29 +803,36 @@ def parse_spreadsheet(spread_path, studyDAO):
                 if verbose: logging.info("  => data for table location")
                 line_dic['location'] = format_to_compare(line_dic['location'])
                 if verbose: logging.info("  - data for table location: "+str(line_dic['location']))
-            #added this section to cope with the absence of project accession (required for website)
-            if 'project' in line_dic and len(line_dic['project']['name']) > 0 and len(line_dic['project']['accession'])==0:
+            #added this section to cope with the absence of project accession (required for website). Priority is previous entry/ies from spreadsheet then database and line entry.
+            if 'project' in line_dic and len(line_dic['project']['name']) > 0:
+                #attempts to get the accession from previous submission or from the database
                 if line_dic['project']['name'] in new_proj:
                     project_acc=new_proj[line_dic['project']['name']]
                 else:
                     proj_acc = studyDAO.getTableData("project", "accession", "name ='"+line_dic['project']['name'] +"';" )
-                    if len(proj_acc) >0:
+                    if len(proj_acc) > 0:
                         project_acc=proj_acc[0]['accession']
                     else:
                         project_acc=""
+                        #if provided in entry sheet, use the entry
+                        if 'accession' in line_dic['project']:
+                            project_acc=line_dic['project']['accession']
+                #if there was no entry after parsing spreadsheet nor in the database: create an accession
                 if len(project_acc)==0:
                     all_acc = studyDAO.getTableData("project", "accession", "accession like 'NYSUB%';" )
+                    #get data from the db if present
                     if len(all_acc) >0:
                         max_db_acc=max([x['accession'] for x in all_acc])
                     else:
                         max_db_acc=""
-                    max_new_acc=[max(x) for x in new_proj.values()]
+                    max_new_acc=max(list(new_proj.values()))
                     if len(max_db_acc) >0 or len(max_new_acc)>0:
-                        max_acc=[max(max_db_acc[0]['accession'], max_new_acc[0])][0][6:]
+                        max_acc=max(max_db_acc, max_new_acc)
                     else:
                         max_acc="0"
-                    l=len(str(int(max_acc)+1))
-                    max_all_acc="0"*(4-l)+str(int(max_acc)+1)
+                    #get the length of the numeric part (not counting the 0)
+                    l=len(str(int(max_acc[5:])+1))
+                    max_all_acc="0"*(4-l)+str(int(max_acc[5:])+1)
                     #prefix is NYSUB for Not Yet SUBmitted
                     line_dic['project']['accession']="NYSUB"+max_all_acc
                     new_proj[line_dic['project']['name']]=line_dic['project']['accession']
