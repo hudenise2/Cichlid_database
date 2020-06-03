@@ -39,21 +39,26 @@ usage: Cichlid_db_update.py automates entry of data from input template spreadsh
 
 def adjust_header_list(line):
     '''To cope with the fact that not all fields will be present in data to upload '''
-    full_column_list=['option', 'individual_name', 'alias', 'species_name', 'taxon_id', 'common_name', 'taxon_position', 'date_collected', 'collection_method',
-     'collection_details', 'collector_name', 'country', 'location', 'location_details', 'latitude', 'longitude', 'sex', 'developmental_name', 'individual_weight',
-     'unit', 'individual_comment', 'material_name', 'material_accession', 'organism_part', 'material_type', 'storage_condition', 'material_location',
-     'material_amount', 'material_unit', 'material_provider_name', 'material_comment', 'date_received', 'image_name', 'image_path', 'image_comment',
-     'image_licence', 'project_name', 'project_alias', 'project_ssid', 'project_accession', 'sample_name', 'sample_accession', 'sample_ssid', 'sample_comment',
-     'lane_name', 'lane_accession', 'library_name', 'library_ssid', 'seq_centre', 'seq_tech', 'paired-end', 'file_name', 'format', 'file_accession', 'md5',
-     'filepath', 'nber_reads', 'nber_bases', 'avg_length', 'file_comment']
-    full_header_list=['record-option','individual-name','individual-alias', 'species-name','species-taxon_id','species-common_name','species-taxon_position',
-     'individual-date_collected', 'individual-collection_method', 'individual-collection_details','provider-provider_name', 'location-country_of_origin',
-     'location-location',   'location-sub_location','location-latitude','location-longitude', 'individual-sex','developmental_stage-name','individual_data-weight',
-     'individual_data-unit',   'individual-comment','material-name','material-accession', 'organism_part-name','material-type',   'material-storage_condition',
-     'material-storage_location', 'material-amount','material-unit', 'mat_provider-provider_name', 'material-comment', 'material-date_received', 'image-filename',
-     'image-filepath','image-comment', 'image-licence','project-name',   'project-alias', 'project-ssid','project-accession', 'sample-name', 'sample-accession',
-     'sample-ssid','sample-comment', 'lane-name','lane-accession', 'library_type-name',   'library-ssid', 'seq_centre-name','seq_tech-name', 'file-type',
-     'file-name','file-format','file-accession','file-md5', 'file-location', 'file-nber_reads','file-total_length', 'file-average_length', 'file-comment']
+    full_column_list=['option', 'individual_name', 'alias', 'species_name', 'genus', 'species', 'informal', 'taxon_id', 'common_name',
+     'taxon_position', 'date_collected', 'collection_method', 'collection_details', 'collector_name', 'country', 'location',
+     'location_details', 'latitude', 'longitude', 'sex', 'developmental_name', 'individual_weight', 'unit', 'individual_comment',
+     'clade', 'species_subset', 'material_name', 'material_accession', 'organism_part', 'material_type', 'storage_condition',
+     'material_location', 'material_amount', 'material_unit', 'material_provider_name', 'material_comment', 'date_received',
+     'image_name', 'image_path', 'image_comment', 'image_licence', 'project_name', 'project_alias', 'project_ssid', 'project_accession',
+     'sample_name', 'sample_accession', 'sample_ssid', 'sample_comment', 'lane_name', 'lane_accession', 'library_name', 'library_ssid',
+     'seq_centre', 'seq_tech', 'paired-end', 'file_name', 'format', 'file_accession', 'md5', 'filepath', 'nber_reads', 'total_length',
+     'average_length', 'sequence_depth', 'exclusion_code', 'file_comment']
+    full_header_list=['record-option','individual-name','individual-alias', 'species-name', 'species-genus', 'species-species',
+     'species-informal', 'species-taxon_id','species-common_name','species-taxon_position', 'individual-date_collected',
+     'individual-collection_method', 'individual-collection_details','provider-provider_name', 'location-country_of_origin',
+     'location-location', 'location-sub_location','location-latitude','location-longitude', 'individual-sex','developmental_stage-name',
+     'individual_data-weight', 'individual_data-unit', 'individual-comment', 'individual_data-clade', 'individual_data-subset',
+     'material-name','material-accession', 'organism_part-name','material-type', 'material-storage_condition', 'material-storage_location',
+     'material-amount','material-unit', 'mat_provider-provider_name', 'material-comment', 'material-date_received', 'image-filename',
+     'image-filepath','image-comment', 'image-licence','project-name',   'project-alias', 'project-ssid','project-accession', 'sample-name',
+     'sample-accession', 'sample-ssid','sample-comment', 'lane-name','lane-accession', 'library_type-name', 'library-ssid',
+     'seq_centre-name','seq_tech-name', 'file-type', 'file-name','file-format','file-accession','file-md5', 'file-location',
+     'file-nber_reads','file-total_length', 'file-average_length', 'file-coverage', 'file-exclusion', 'file-comment']
     #create list of indexes for the column present in the spreadsheet
     if line.startswith('HEADER'):
         LINE=line.split("\t")[1:]
@@ -271,6 +276,7 @@ def dispatch_data(raw_results, annotations_data, entry_name, studyDAO, mydbconn)
     '''
     generic function to call for update/population of the database with data from spreadsheet
     : input raw_results (dic) parsed data from the spreadsheet
+    : input  (dic) parsed data from the spreadsheet
     : input entry_name (str) name of the Google spreadsheet tab
     : input studyDAO (connection object) object to connect to the database
     : input mydbconn (database connection_socket) connection to the Cichlid database
@@ -287,19 +293,15 @@ def dispatch_data(raw_results, annotations_data, entry_name, studyDAO, mydbconn)
         if verbose: logging.info("Dispath data for individual name: "+individual_name)
         #more than one entry per individual could be encountered
         for index in range(0,len(raw_results[individual_name])):
-            if 'record' in raw_results[individual_name][index]:
-                if raw_results[individual_name][index]['record']['option']=='update':
-                    if verbose: logging.info(" UPDATE RECORD FROM DATABASE")
-                    update_flag=update_entry(raw_results[individual_name][index], annotations_data[individual_name][index], studyDAO)
-                elif raw_results[individual_name][index]['record']['option']=='overwrite':
-                    if verbose: logging.info(" OVERWRITE RECORD FROM DATABASE")
-                    overwrite_flag=overwrite_entry(raw_results[individual_name][index], annotations_data[individual_name][index], studyDAO)
-                else:
-                    if verbose: logging.info(" INSERT RECORD INTO DATABASE")
-                    insert_flag=insert_entry(raw_results[individual_name][index], annotations_data[individual_name][index], studyDAO)
-            else:
+            if 'record' not in raw_results[individual_name][index] or raw_results[individual_name][index]['record']['option'] not in ('update', 'overwrite'):
                 if verbose: logging.info(" INSERT RECORD INTO DATABASE")
                 insert_flag=insert_entry(raw_results[individual_name][index], annotations_data[individual_name][index], studyDAO)
+            elif raw_results[individual_name][index]['record']['option']=='update':
+                    if verbose: logging.info(" UPDATE RECORD FROM DATABASE")
+                    update_flag=update_entry(raw_results[individual_name][index], annotations_data[individual_name][index], studyDAO)
+            elif raw_results[individual_name][index]['record']['option']=='overwrite':
+                    if verbose: logging.info(" OVERWRITE RECORD FROM DATABASE")
+                    overwrite_flag=overwrite_entry(raw_results[individual_name][index], annotations_data[individual_name][index], studyDAO)
             if insert_flag > 0 or update_flag>0 or overwrite_flag>0:
                 logging.info("Committing data from the "+raw_results_type+" "+entry_name+" to the database")
                 if insert_flag > 0: logging.info(" - "+str(insert_flag)+" insertions took place")
@@ -348,11 +350,14 @@ def format_to_compare(dic):
 def get_cv_id(studyDAO):
     '''query the database to get the relevant cv_id'''
     cv_dic={}
-    cv_data = studyDAO.getTableData("cv", "cv_id, comment", "attribute = 'notes' and comment like 'entry for%'")
+    cv_data = studyDAO.getTableData("cv", "cv_id, attribute, comment", "(attribute = 'notes' and comment like 'entry for%') or attribute ='exclusion'")
     if len(cv_data) > 0:
         for entry in cv_data:
-            table=entry['comment'].replace('entry for table ','')
-            cv_dic[table]=entry['cv_id']
+            if entry['attribute']=='exclusion':
+                cv_dic['file']=entry['cv_id']
+            else:
+                table=entry['comment'].replace('entry for table ','')
+                cv_dic[table]=entry['cv_id']
         if verbose: logging.info("      + get cv_id(s) from table cv: "+str(cv_dic))
     return cv_dic
 
@@ -362,7 +367,7 @@ def get_database_data(data, studyDAO, flag):
     database_dic={}
     identifier_dic = {'individual' : 'name', 'species' : 'name', 'material' : 'name', 'location' : 'location', 'ontology' : 'name', 'lane': 'accession',
      'file' : 'name', 'developmental_stage' : 'name', 'project': 'name', 'sample': 'name', 'image' : 'filename', 'organism_part': 'name', 'provider' : 'provider_name',
-     'cv' : 'attribute', 'seq_centre': 'name', 'seq_tech' : 'name', 'library_type' : 'name', 'library' : 'ssid' }#, 'annotations': 'table+table_id'}
+     'cv' : 'attribute', 'seq_centre': 'name', 'seq_tech' : 'name', 'library_type' : 'name', 'library' : 'ssid' }
     table_list= (list(data.keys()))
     table_list.remove('record')
     #ensure that individual table is treated at the end as it has most dependencies
@@ -583,17 +588,18 @@ def insert_entry(new_data, annotations_data, studyDAO):
         cv_dic=get_cv_id(studyDAO)
         #check if value is already in 'individual_data' or 'annotations'
         if table != 'individual':
-            annotations_query=studyDAO.getTableData("annotations", "cv_id", "table_name = '" +table+"' and table_id= "+str(database_data[table]) +" and value = '"+str(annotations_data[table])+"'")
-            if len(annotations_query)==0:
-                if verbose: logging.info("  C6a - insert into table annotations: "+str({"table_name":table, "table_id": str(database_data[table]), "cv_id":str(cv_dic[table]), "value":str(annotations_data[table])}))
-                insert_data("annotations", {"table_name":table, "table_id": str(database_data[table]), "cv_id":str(cv_dic[table]), "value":str(annotations_data[table])}, ",", "", "", studyDAO)
-                insert_flag+=1
+            for annotation in annotations_data[table]:
+                annotation_query=studyDAO.getTableData("annotations", "cv_id", "table_name = '" +table+"' and table_id= "+str(database_data[table]) +" and value = '"+str(annotations_data[table][annotation])+"'")
+                if len(annotation_query)==0:
+                    if verbose: logging.info("  C6a - insert into table annotations: "+str({"table_name":table, "table_id": str(database_data[table]), "cv_id":str(cv_dic[table]), "value":str(annotations_data[table])}))
+                    insert_data("annotations", {"table_name":table, "table_id": str(database_data[table]), "cv_id":str(cv_dic[table]), "value":str(annotations_data[table][annotation])}, ",", "", "", studyDAO)
+                    insert_flag+=1
         else:
             if verbose: logging.info(" - insert into table individual_data")
-            individual_data_query=studyDAO.getTableData("individual_data", "cv_id", "individual_id= "+str(database_data[table])+" and value = '"+str(annotations_data[table])+"'")
+            individual_data_query=studyDAO.getTableData("individual_data", "cv_id", "individual_id= "+str(database_data[table])+" and value = '"+str(annotations_data[table]['comment'])+"'")
             if len(individual_data_query)==0:
-                if verbose: logging.info("  C6b - insert into table individual_data: "+str({"individual_id":str(database_data[table]), "cv_id":str(cv_dic[table]), "value":str(annotations_data[table]), "comment": 'extracted the '+today+' from '+input_name}))
-                insert_data("individual_data", {"individual_id":str(database_data[table]), "cv_id":str(cv_dic[table]), "value":str(annotations_data[table]), "comment": 'extracted the '+today+' from '+input_name}, ",", "", "", studyDAO)
+                if verbose: logging.info("  C6b - insert into table individual_data: "+str({"individual_id":str(database_data[table]), "cv_id":str(cv_dic[table]), "value":str(annotations_data[table]['comment']), "comment": 'extracted the '+today+' from '+input_name}))
+                insert_data("individual_data", {"individual_id":str(database_data[table]), "cv_id":str(cv_dic[table]), "value":str(annotations_data[table]['comment']), "comment": 'extracted the '+today+' from '+input_name}, ",", "", "", studyDAO)
                 insert_flag+=1
     if verbose: logging.info("  - "+str(insert_flag)+" insertion(s) took place")
     return insert_flag
@@ -709,7 +715,7 @@ def parse_spreadsheet(spread_path, studyDAO):
     : input spread_path (str) absolute path to the spreadsheet
     : input studyDAO (connection object) object to connect to the database
     : return spread_dic (dic) nested dictionary  with individual_names as key and values in the format [{'table' :['field' : value from datasheet]}]
-    : return annotations_dic (dic) nested dictionary with table as key and comments from spreadsheet as values
+    : return annotations_dic (dic) nested dictionary with table as key and dictionaries with header as key and corresponding data from spreadsheet as values
     : return spreadsheet (str) name of the spreadsheet parsed
     '''
     firstColumn = 0
@@ -799,6 +805,9 @@ def parse_spreadsheet(spread_path, studyDAO):
             if 'file' in line_dic:
                 if line_dic['file']['type']:
                     line_dic['file']['type']='PE'
+                if line_dic['file']['exclusion']:
+                    annotation_entry_dic['file']={'exclusion':line_dic['file']['exclusion']}
+                    del line_dic['file']['exclusion']
             if 'location' in line_dic and (len(line_dic['location']['latitude']) > 0 and len(line_dic['location']['longitude']) >0):
                 if verbose: logging.info("  => data for table location")
                 line_dic['location'] = format_to_compare(line_dic['location'])
@@ -846,6 +855,7 @@ def parse_spreadsheet(spread_path, studyDAO):
                     line_dic['individual_data']['weight']=transform_weight_unit({'weight': line_dic['individual_data']['weight'], 'unit': line_dic['individual_data']['unit']})
                     line_dic['individual_data']['unit']='g'
                     if verbose: logging.info("  - data for individual weight: "+str(line_dic['individual_data']))
+
             #full copy of dictionary to be able to keep the newly created dictionary while modifying one copy
             Line_dic=copy.deepcopy(line_dic)
             #go through the content of the dictionary
@@ -856,20 +866,25 @@ def parse_spreadsheet(spread_path, studyDAO):
                         if len(line_dic[table][field]) == 0:
                             del Line_dic[table][field]
                     #deal with comment separately
-                    if field == 'comment' and len(line_dic[table][field]) > 0 and table != 'image':
-                        annotation_entry_dic[table]=line_dic[table][field]
-                        del Line_dic[table][field]
-                        if verbose: logging.info("  - comments for annotations table: "+str(annotation_entry_dic[table]))
+                    if field == 'comment' and len(line_dic[table][field]) > 0:
+                        if table not in ('image', 'individual', 'individual_data'):
+                            if table not in annotation_entry_dic:
+                                annotation_entry_dic[table]={}
+                            annotation_entry_dic[table][field]=line_dic[table][field]
+                            del Line_dic[table][field]
+                            if verbose: logging.info("  - comments for annotations table: "+str(annotation_entry_dic[table]))
+                        elif table=='individual':
+                            annotation_entry_dic['individual']={'comment':line_dic[table]['comment']}
+                            del Line_dic[table]['comment']
                 #remove table from dic if all is fields have no data associated
                 if len(Line_dic[table]) == 0:
                     del Line_dic[table]
             #ensure data are processed if same individual listed twice in spreadsheet
             if individual_name in spread_dic:
                 spread_dic[individual_name].append(Line_dic)
-                annotations_dic[individual_name].append(annotation_entry_dic)
             else:
                 spread_dic[individual_name] =[Line_dic]
-                annotations_dic[individual_name]=[annotation_entry_dic]
+            annotations_dic[individual_name]=[annotation_entry_dic]
     if verbose: logging.info("READ DATA FOR "+str(spread_dic.keys()))
     return spread_dic, annotations_dic, spreadsheet
 
