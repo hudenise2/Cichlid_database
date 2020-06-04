@@ -15,7 +15,7 @@ from dao.mysql import StudyDAO
 import Get_taxonomy_from_NCBI as TaxUtils
 import copy
 
-__author__ = 'Hubert Denise, Feb. 2020'
+__author__ = 'Hubert Denise, Jun. 2020'
 
 '''Cichlid_db_updateV4.py automates entry of data from input template available on Google spreadsheets into the Cichlid db. Type Cichlid_db_update.py -h for help.
     Usage: Cichlid_db_updateV4.py (-o) (-v) (-c) (-sp <'input'>)
@@ -628,10 +628,7 @@ def insert_entry(new_data, annotations_data, studyDAO):
                 if table !='individual_data':
                     new_index=studyDAO.getmaxIndex(table)[0]['max('+table+'_id)']
                     database_data[table]=new_index
-    print(database_data)
     database_data=ensure_data_continuity(database_data, studyDAO)
-    print(database_data)
-
     #special case for comment fields
     if verbose: logging.info("  C6 - deal with comments and annotations table")
     for table in annotations_data:
@@ -822,7 +819,6 @@ def parse_spreadsheet(spread_path, studyDAO):
             if table not in line_dic:
                 line_dic[table] = {}
             line_dic[table][field] = dataline[index].strip()
-        print(line_dic)
         #individual is the main table and name is the identifier. So if no name is present: do not insert
         if 'individual' in line_dic and len(line_dic['individual']['name']) > 0:
             individual_name=line_dic['individual']['name']
@@ -908,8 +904,6 @@ def parse_spreadsheet(spread_path, studyDAO):
                     line_dic['individual_data']['weight']=transform_weight_unit({'weight': line_dic['individual_data']['weight'], 'unit': line_dic['individual_data']['unit']})
                     line_dic['individual_data']['unit']='g'
                     if verbose: logging.info("  - data for individual weight: "+str(line_dic['individual_data']))
-            print(line_dic)
-
             #full copy of dictionary to be able to keep the newly created dictionary while modifying one copy
             Line_dic=copy.deepcopy(line_dic)
             #go through the content of the dictionary
@@ -933,7 +927,6 @@ def parse_spreadsheet(spread_path, studyDAO):
                 #remove table from dic if all is fields have no data associated
                 if len(Line_dic[table]) == 0:
                     del Line_dic[table]
-            print(Line_dic)
             #Line_dic=ensure_data_continuity(Line_dic)
             #ensure data are processed if same individual listed twice in spreadsheet
             if individual_name in spread_dic:
