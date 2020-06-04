@@ -316,6 +316,53 @@ def dispatch_data(raw_results, annotations_data, entry_name, studyDAO, mydbconn)
                 logging.error("The program failed to import data from the "+raw_results_type+" "+entry_name+" with the below exception:")
                 raise
 
+def ensure_data_continuity(entry_dic, studyDAO):
+    '''function to ensure file and lane data are linked to material and individual'''
+    """
+    : input entry_dic (dic) dictionary with tables as keys and dictionary of field, input value as values
+    : return entry_dic (dic) as input dic, updated with link id(s)
+    """
+    to_complete=""
+    link_tables=[]
+    #there will be individual and material information. Check if there is lane or file info in the input dictionary and create the link
+    missing_tables=[x for x in ['sample', 'lane', 'file'] if x not in entry_dic]
+    linked_tables={'sample': ['material_id'], 'lane':['sample_id', 'library_id', 'seq_tech_id', 'seq_centre_id']}
+    #there is a need to create sample if lane and info is present
+    if missing_tables!=['file']:
+        return entry_dic
+    else:
+        #there is a need to create sample if lane and file info is present
+        if 'file' in missing_tables and 'lane' in missing_tables:
+            #get name of table to add in order to link with material and dependent table
+            link_tables=['sample']
+            linked_table=['material']
+        else:
+            #then data from sample and lane should be present
+            if 'sample' in missing_tables:
+                #get name of table to add in order to link with material and dependent table
+                link_tables=['sample']
+                linked_table=['material']
+                to_complete=['lane']
+            if 'lane' in missing_tables:
+                #get name of tables to add in order to link with material and dependent tables
+                link_tables=['sample', 'lane']
+                linked_table=['material', 'library', 'sample']
+                to_complete=['lane', 'file']
+        for table in link_tables:
+            if table not in entry_dic:
+                #get latest table'_id'
+                previous_index=studyDAO.getmaxIndex(table)[0]['max('+table+'_id)']
+                #prepare statement
+                field_str="("+table+"_id, "+",".join([x for x in linked_tables[table] if x[:-3] in entry_dic])+', changed, latest)'
+                value_str="("+str(previous_index+1)+","+",".join([str(entry_dic[x[:-3]]) for x in linked_tables[table] if x[:-3] in entry_dic])+",'"+today+"', 1)"
+                #populate the database and update entry_dic
+                studyDAO.populate_table(table, field_str, value_str)
+                entry_dic[table]=previous_index+1
+        #finally update the database with corresponding value to link final table
+        if len(to_complete) >0:
+            studyDAO.update(to_complete[link_tables.index(table)], table+"_id = "+str(entry_dic[table]), to_complete[link_tables.index(table)]+"_id", entry_dic[to_complete[link_tables.index(table)]])
+        return entry_dic
+
 def format_date(entry_date):
     '''
     function to re-format the date fields from the data fromm the spreadsheet in mysql compatible format (YYYY-MM-DD)
@@ -581,6 +628,10 @@ def insert_entry(new_data, annotations_data, studyDAO):
                 if table !='individual_data':
                     new_index=studyDAO.getmaxIndex(table)[0]['max('+table+'_id)']
                     database_data[table]=new_index
+    print(database_data)
+    database_data=ensure_data_continuity(database_data, studyDAO)
+    print(database_data)
+
     #special case for comment fields
     if verbose: logging.info("  C6 - deal with comments and annotations table")
     for table in annotations_data:
@@ -771,6 +822,7 @@ def parse_spreadsheet(spread_path, studyDAO):
             if table not in line_dic:
                 line_dic[table] = {}
             line_dic[table][field] = dataline[index].strip()
+        print(line_dic)
         #individual is the main table and name is the identifier. So if no name is present: do not insert
         if 'individual' in line_dic and len(line_dic['individual']['name']) > 0:
             individual_name=line_dic['individual']['name']
@@ -805,9 +857,10 @@ def parse_spreadsheet(spread_path, studyDAO):
             if 'file' in line_dic:
                 if line_dic['file']['type']:
                     line_dic['file']['type']='PE'
-                if line_dic['file']['exclusion']:
+                if 'exclusion' in line_dic['file'] and line_dic['file']['exclusion']:
                     annotation_entry_dic['file']={'exclusion':line_dic['file']['exclusion']}
                     del line_dic['file']['exclusion']
+
             if 'location' in line_dic and (len(line_dic['location']['latitude']) > 0 and len(line_dic['location']['longitude']) >0):
                 if verbose: logging.info("  => data for table location")
                 line_dic['location'] = format_to_compare(line_dic['location'])
@@ -855,6 +908,7 @@ def parse_spreadsheet(spread_path, studyDAO):
                     line_dic['individual_data']['weight']=transform_weight_unit({'weight': line_dic['individual_data']['weight'], 'unit': line_dic['individual_data']['unit']})
                     line_dic['individual_data']['unit']='g'
                     if verbose: logging.info("  - data for individual weight: "+str(line_dic['individual_data']))
+            print(line_dic)
 
             #full copy of dictionary to be able to keep the newly created dictionary while modifying one copy
             Line_dic=copy.deepcopy(line_dic)
@@ -879,6 +933,8 @@ def parse_spreadsheet(spread_path, studyDAO):
                 #remove table from dic if all is fields have no data associated
                 if len(Line_dic[table]) == 0:
                     del Line_dic[table]
+            print(Line_dic)
+            #Line_dic=ensure_data_continuity(Line_dic)
             #ensure data are processed if same individual listed twice in spreadsheet
             if individual_name in spread_dic:
                 spread_dic[individual_name].append(Line_dic)
