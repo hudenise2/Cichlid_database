@@ -844,6 +844,21 @@ def parse_spreadsheet(spread_path, studyDAO):
                     except ValueError:
                         line_dic['species']['common_name'] = line_dic['species']['taxon_id']
                         del line_dic['species']['taxon_id']
+                #cases where genus, species and informal are provided: take precedent to name
+                if len(line_dic['species']['genus']) > 0:
+                    if len(line_dic['species']['informal'])>0 and not line_dic['species']['informal'].startswith("c.f."):
+                        line_dic['species']['informal']='"'+line_dic['species']['informal']+'"'
+                    line_dic['species']['name']=" ".join([line_dic['species'][x] for x in ['genus', 'species', 'informal'] if len(line_dic['species'][x]) > 0])
+                #cases where name is provided but not genus, species and informal
+                if len(line_dic['species']['name']) > 0 and len(line_dic['species']['genus']) == 0:
+                    name_part=line_dic['species']['name'].split(" ")
+                    line_dic['species']['genus']=name_part[0]
+                    if len(name_part) > 2:
+                        if name_part[1].startswith('c.f.'):
+                            line_dic['species']['informal'] = " ".join(name_part[1:])
+                        else:
+                            line_dic['species']['species']=name_part[1]
+                            line_dic['species']['informal'] = '"'+" ".join(name_part[2:])+'"'
                 #deal with case where name is too short (? or other)
                 if 'name' in line_dic['species'] and (len(line_dic['species']['name']) > 0 and  len(line_dic['species']['name'])< 4):
                     del line_dic['species']
