@@ -23,10 +23,12 @@ class StudyDAO:
 
 	def getStudyData(self, table, field, identifier):
 		query = "SELECT * from " + table+ " where " + field + " = \'{0}\'".format(identifier)
+		print(query)
 		return self.dataAccessObject._runQuery(query)
 
 	def getTableData(self, table, return_field, identifier):
 		query = "SELECT " + return_field +" from " + table+ " where " +identifier
+		print(query)
 		return self.dataAccessObject._runQuery(query)
 
 	def getmaxIndex(self, table):
@@ -39,10 +41,12 @@ class StudyDAO:
 
 	def populate_table(self, table, field_str, value_str):
 		query = "insert INTO "+table +" "+field_str+" values "+value_str
+		print(query)
 		return self.dataAccessObject._runQuery(query)
 
 	def update(self, table, field_statement, identifier, identifiant):
 		query = "update "+table +" set "+field_statement +" where " + identifier +" = '" + str(identifiant) +"'"
+		print(query)
 		return self.dataAccessObject._runQuery(query)
 
 	def createViews(self, view_name, table_name):
